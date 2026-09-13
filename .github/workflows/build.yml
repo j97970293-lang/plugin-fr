@@ -35,14 +35,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ ! -d "$GITHUB_WORKSPACE/builds/.git" ]; then
-            rm -rf "$GITHUB_WORKSPACE/builds"
-            mkdir -p "$GITHUB_WORKSPACE/builds"
-            cd "$GITHUB_WORKSPACE/builds"
+          BUILDS="$GITHUB_WORKSPACE/builds"
+          # A failed checkout (branch does not exist yet) still leaves a repo
+          # sitting on "master" — check the actual branch, not just .git.
+          if [ ! -d "$BUILDS/.git" ] || [ "$(cd "$BUILDS" && git symbolic-ref -q --short HEAD)" != "builds" ]; then
+            rm -rf "$BUILDS"
+            mkdir -p "$BUILDS"
+            cd "$BUILDS"
             git init -b builds
             git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           fi
-          cd "$GITHUB_WORKSPACE/builds"
+          cd "$BUILDS"
           rm -f *.cs3 *.jar plugins.json repo.json || true
 
       - name: Setup JDK 17
