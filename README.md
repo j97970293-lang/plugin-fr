@@ -41,7 +41,11 @@ https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/repo.json
 
 > Le workflow GitHub Actions construit et publie automatiquement `AnimoFlixProvider.cs3` + `plugins.json` + `repo.json` sur la branche `builds` à chaque push.
 
-### Méthode 2 — Installer le fichier directement
+### Méthode 2 — Depuis la release GitHub
+
+Téléchargez le `.cs3` attaché à la release [**v2 (Pre-release)**](https://github.com/j97970293-lang/plugin-fr/releases/tag/v2) puis dans CloudStream : **Paramètres → Extensions → Installer un fichier**.
+
+### Méthode 3 — Installer le fichier du dépôt
 
 Téléchargez [`releases/AnimoFlixProvider.cs3`](releases/AnimoFlixProvider.cs3) puis dans CloudStream : **Paramètres → Extensions → Installer un fichier** (ou placez le fichier dans le dossier `Cloudstream3/extensions`).
 
