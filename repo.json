@@ -1,0 +1,8 @@
+{
+    "name": "AnimoFlix CloudStream",
+    "description": "Extension AnimoFlix pour CloudStream — animes, films & OAV en VF/VOSTFR",
+    "manifestVersion": 1,
+    "pluginLists": [
+        "https://raw.githubusercontent.com/USER/animoflix-cloudstream/builds/plugins.json"
+    ]
+}
