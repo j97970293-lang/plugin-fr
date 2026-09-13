@@ -1,0 +1,8 @@
+{
+  "name": "Plugin fr",
+  "description": "Extensions CloudStream FR — 13 sources : AnimoFlix, Zenix, WaveWatch, Afterdark, FRAnime, French Stream, Flemmix, Vostfree, Anime-Sama, AnimeSite, CineStream, Purstream, 1JOUR1FILM (films, séries, animes, TV live) VF/VOSTFR",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/plugins.json"
+  ]
+}

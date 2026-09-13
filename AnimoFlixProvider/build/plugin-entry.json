@@ -1,0 +1,23 @@
+{
+    "iconUrl": "https://www.google.com/s2/favicons?domain=animoflix.to&sz=%size%",
+    "fileHash": "sha256-cb066d9a27ed1f828640ebd4ed902babfef0117cd297d5bae092afc0025580c6",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/user/animoflix-cloudstream",
+    "fileSize": 42354,
+    "status": 1,
+    "language": "fr",
+    "authors": [
+        "ArenaAgent"
+    ],
+    "tvTypes": [
+        "Anime",
+        "AnimeMovie",
+        "OVA",
+        "Cartoon"
+    ],
+    "version": 2,
+    "internalName": "AnimoFlixProvider",
+    "description": "AnimoFlix \u2014 Animes, films & OAV en VF/VOSTFR",
+    "url": "https://raw.githubusercontent.com/user/animoflix-cloudstream/builds/AnimoFlixProvider.cs3",
+    "name": "AnimoFlixProvider"
+}

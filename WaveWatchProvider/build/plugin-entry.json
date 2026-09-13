@@ -1,0 +1,23 @@
+{
+    "iconUrl": "https://www.google.com/s2/favicons?domain=wavewatch.top&sz=%size%",
+    "fileHash": "sha256-3608b57ee9a732cb3ccd8bfa6f93fa08e9cd407e9bdb51200f8ccc699ccd94b9",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/user/animoflix-cloudstream",
+    "fileSize": 77103,
+    "status": 1,
+    "language": "fr",
+    "authors": [
+        "ArenaAgent"
+    ],
+    "tvTypes": [
+        "Movie",
+        "TvSeries",
+        "Anime",
+        "Live"
+    ],
+    "version": 1,
+    "internalName": "WaveWatchProvider",
+    "description": "WaveWatch \u2014 Films, s\u00e9ries, animes & TV en direct (VF/VOSTFR)",
+    "url": "https://raw.githubusercontent.com/user/animoflix-cloudstream/builds/WaveWatchProvider.cs3",
+    "name": "WaveWatchProvider"
+}
