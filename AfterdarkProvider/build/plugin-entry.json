@@ -1,0 +1,21 @@
+{
+    "iconUrl": "https://www.google.com/s2/favicons?domain=afd926.mom&sz=%size%",
+    "fileHash": "sha256-3892d5fcf02d01d411a7f6ebfab66a45962a214e7b69493b96f017937916edf4",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/user/animoflix-cloudstream",
+    "fileSize": 67629,
+    "status": 1,
+    "language": "fr",
+    "authors": [
+        "ArenaAgent"
+    ],
+    "tvTypes": [
+        "Movie",
+        "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "AfterdarkProvider",
+    "description": "Afterdark \u2014 Films et s\u00e9ries en VOSTFR (multi-serveurs)",
+    "url": "https://raw.githubusercontent.com/user/animoflix-cloudstream/builds/AfterdarkProvider.cs3",
+    "name": "AfterdarkProvider"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Plugin fr",
+  "description": "Extensions CloudStream FR — 26 sources : AnimoFlix, Zenix, WaveWatch, Afterdark, FRAnime, French Stream, Flemmix, Vostfree, Anime-Sama, AnimeSite, CineStream, Purstream, 1JOUR1FILM, Movix, Frembed, Xalaflix (films, séries, animes, TV live FR + Madagascar + francophonie) et 9 extensions 18+ dont 5 françaises (Adkami Hentai, TrixHentai, Pornovore, Hentai-Fap, Hentai-VOSTFR) VF/VOSTFR",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/plugins.json"
+  ]
+}
