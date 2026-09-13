@@ -36,10 +36,10 @@ https://x0.at/gMeP.json
 Dans CloudStream : **Paramètres → Extensions → Ajouter un dépôt** et coller l'URL `repo.json` de la branche `builds` de ce dépôt :
 
 ```
-https://raw.githubusercontent.com/VOTRE-COMPTE/animoflix-cloudstream/builds/repo.json
+https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/repo.json
 ```
 
-> Remplacez `VOTRE-COMPTE` par le propriétaire GitHub du dépôt. Le workflow GitHub Actions construit et publie automatiquement `AnimoFlixProvider.cs3` + `plugins.json` + `repo.json` sur la branche `builds` à chaque push.
+> Remplacez `j97970293-lang` par le propriétaire GitHub du dépôt. Le workflow GitHub Actions construit et publie automatiquement `AnimoFlixProvider.cs3` + `plugins.json` + `repo.json` sur la branche `builds` à chaque push.
 
 ### Méthode 2 — Installer le fichier directement
 
