@@ -1,10 +1,10 @@
 [
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=animoflix.to&sz=%size%",
-        "fileHash": "sha256-d49e4e339e287ea571d3e863ba9728d52f8f85296b2d571fdb6676aee88774b0",
+        "fileHash": "sha256-cb066d9a27ed1f828640ebd4ed902babfef0117cd297d5bae092afc0025580c6",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/user/animoflix-cloudstream",
-        "fileSize": 37717,
+        "fileSize": 42354,
         "status": 1,
         "language": "fr",
         "authors": [
@@ -16,7 +16,7 @@
             "OVA",
             "Cartoon"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "AnimoFlixProvider",
         "description": "AnimoFlix \u2014 Animes, films & OAV en VF/VOSTFR",
         "url": "https://raw.githubusercontent.com/user/animoflix-cloudstream/builds/AnimoFlixProvider.cs3",

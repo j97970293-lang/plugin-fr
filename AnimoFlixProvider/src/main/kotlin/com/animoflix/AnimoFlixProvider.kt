@@ -47,8 +47,11 @@ import org.jsoup.nodes.Element
 class AnimoFlixPlugin : BasePlugin() {
     override fun load() {
         registerMainAPI(AnimoFlixProvider())
-        // Custom extractor for ansembed.net (VidMoly clone used by AnimoFlix)
+        // Custom extractors used by AnimoFlix:
+        // - ansembed.net (VidMoly/JWPlayer clone)
+        // - odysee.com (LBRY)
         registerExtractorAPI(AnsEmbed())
+        registerExtractorAPI(Odysee())
     }
 }
 
@@ -78,6 +81,57 @@ class AnsEmbed : ExtractorApi() {
             ?: throw ErrorLoadingException("No JWPlayer sources found")
 
         JwPlayerHelper.extractStreamLinks(script, name, mainUrl, callback, subtitleCallback)
+    }
+}
+
+/**
+ * Odysee (LBRY) videos, embedded on AnimoFlix as https://odysee.com/$/embed/@channel:id/claim-name
+ * Resolves the claim through the public LBRY API and builds the direct stream URL.
+ */
+class Odysee : ExtractorApi() {
+    override val name = "Odysee"
+    override val mainUrl = "https://odysee.com"
+    override val requiresReferer = false
+
+    private val claimIdRegex = Regex(""""claim_id"\s*:\s*"([0-9a-f]{40})"""")
+    private val sdHashRegex = Regex(""""sd_hash"\s*:\s*"([0-9a-f]{96})"""")
+
+    /** Decodes %XX sequences as UTF-8, keeping literal '+' intact. */
+    private fun percentDecode(input: String): String =
+        java.net.URLDecoder.decode(input.replace("+", "%2B"), "UTF-8")
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        // https://odysee.com/$/embed/@channel:9/claim-name  ->  lbry://@channel:9/claim-name
+        val encodedPath = url.substringBefore("?").substringAfter("/$/embed/").trimEnd('/')
+        if (encodedPath.isEmpty()) throw ErrorLoadingException("Invalid Odysee embed url")
+
+        val response = app.post(
+            "https://api.na-backend.odysee.com/api/v1/proxy?m=resolve",
+            json = com.lagradost.nicehttp.JsonAsString(
+                """{"jsonrpc":"2.0","method":"resolve","params":{"urls":["lbry://${percentDecode(encodedPath)}"]},"id":1}"""
+            )
+        ).text
+
+        val claimId = claimIdRegex.find(response)?.groupValues?.get(1)
+            ?: throw ErrorLoadingException("Odysee claim not found")
+        val sdHash = sdHashRegex.find(response)?.groupValues?.get(1)
+            ?: throw ErrorLoadingException("Odysee stream not found")
+
+        val streamUrl =
+            "https://player.odycdn.com/api/v4/streams/free/$encodedPath/$claimId/${sdHash.take(6)}"
+
+        callback(
+            newExtractorLink(name, name, streamUrl) {
+                this.referer = mainUrl
+                this.quality = Qualities.Unknown.value
+                this.type = ExtractorLinkType.VIDEO
+            }
+        )
     }
 }
 
@@ -138,15 +192,26 @@ class AnimoFlixProvider : MainAPI() {
         return title.takeIf { it.isNotBlank() && it.length <= 120 }
     }
 
+    /** Poster of a card <a>: its own image, or the anime cover ("fiche") as fallback. */
+    private fun posterOf(a: Element, slug: String?): String? {
+        val img = a.selectFirst("img")?.let {
+            it.attr("data-src").ifBlank { it.attr("src") }
+        }
+        return when {
+            img != null && img.contains("default") && slug != null -> fixUrlNull("/covers/$slug.webp")
+            img != null -> fixUrlNull(img)
+            slug != null -> fixUrlNull("/covers/$slug.webp")
+            else -> null
+        }
+    }
+
     /** Converts a card <a> into a SearchResponse pointing to the anime page. */
     private fun toCard(a: Element): SearchResponse? {
-        val url = animeUrlOf(a.attr("href")) ?: return null
+        val href = a.attr("href")
+        val url = animeUrlOf(href) ?: return null
         val title = titleOf(a) ?: return null
-        val poster = a.selectFirst("img")?.let {
-            it.attr("data-src").ifBlank { it.attr("src") }
-        }?.let { fixUrlNull(it) }
         return newAnimeSearchResponse(title, url, TvType.Anime) {
-            this.posterUrl = poster
+            this.posterUrl = posterOf(a, slugOf(href))
         }
     }
 
@@ -294,12 +359,12 @@ class AnimoFlixProvider : MainAPI() {
 
         val seasonEpisodes = coroutineScope {
             seasonLinks.map { seasonUrl ->
-                async(Dispatchers.IO) { parseSeasonEpisodes(seasonUrl, slug) }
+                async(Dispatchers.IO) { parseSeasonEpisodes(seasonUrl, slug, poster) }
             }.awaitAll()
         }.flatten()
 
         // Fallback: episodes listed directly on the anime page (no season sub-page)
-        val episodes = seasonEpisodes.ifEmpty { parseSeasonEpisodes(url, slug) }
+        val episodes = seasonEpisodes.ifEmpty { parseSeasonEpisodes(url, slug, poster) }
 
         val episodesByDub = episodes
             .groupBy({ it.first }, { it.second })
@@ -323,8 +388,13 @@ class AnimoFlixProvider : MainAPI() {
      * Parses one season page (or the anime page itself as fallback) and returns
      * (DubStatus, Episode) pairs. "vostfr" episodes go to Subbed, "vf" to Dubbed.
      * Special seasons (film, heroines, kai…) are stored as season 0.
+     * Each episode gets the anime poster ("fiche") as thumbnail.
      */
-    private suspend fun parseSeasonEpisodes(seasonUrl: String, slug: String): List<Pair<DubStatus, Episode>> {
+    private suspend fun parseSeasonEpisodes(
+        seasonUrl: String,
+        slug: String,
+        poster: String?
+    ): List<Pair<DubStatus, Episode>> {
         val doc = runCatching { app.get(seasonUrl, interceptor = cfKiller).document }.getOrNull()
             ?: return emptyList()
 
@@ -351,6 +421,7 @@ class AnimoFlixProvider : MainAPI() {
                 this.name = name
                 this.season = seasonNum
                 this.episode = number
+                this.posterUrl = poster
             }
         }.distinctBy { it.second.data }
     }
@@ -371,69 +442,72 @@ class AnimoFlixProvider : MainAPI() {
     ): Boolean {
         val doc = app.get(data, interceptor = cfKiller).document
         val html = doc.html()
-        val players = linkedMapOf<String, String>() // embed url -> label
-        fun addPlayer(url: String, label: String) {
-            val fixed = url.trim()
-            if (fixed.startsWith("http") && !fixed.contains(mainUrl.removePrefix("https://")) && fixed !in players) {
-                players[fixed] = label
-            }
-        }
 
-        // 1) Player <select> present on every episode page
+        // embed url -> (label, restricted). The <select> is server-rendered with every player.
+        val players = LinkedHashMap<String, Pair<String, Boolean>>()
         doc.select("#epLecteurSelect option[value]").forEach { option ->
-            if (option.attr("data-restricted").equals("true", ignoreCase = true)) return@forEach
+            val value = option.attr("value").trim()
+            if (!value.startsWith("http")) return@forEach
+            if (value in players) return@forEach
+            val restricted = option.attr("data-restricted").equals("true", ignoreCase = true)
             val label = option.text().trim().ifBlank { "Lecteur ${players.size + 1}" }
-            addPlayer(option.attr("value"), label)
+            players[value] = label to restricted
         }
 
-        // 2) Fallbacks: iframes, og:video, JSON-LD embedUrl, known hosts in the source
+        // Fallbacks if the select is missing: iframes, og:video, JSON-LD embedUrl, known hosts
         if (players.isEmpty()) {
             doc.select("iframe[src]").forEach { iframe ->
-                addPlayer(iframe.attr("src"), "Lecteur ${players.size + 1}")
+                val src = iframe.attr("src").trim()
+                if (src.startsWith("http") && !src.contains(mainUrl.removePrefix("https://")) && src !in players) {
+                    players[src] = "Lecteur ${players.size + 1}" to false
+                }
             }
-            doc.selectFirst("meta[property=og:video]")?.attr("content")?.let {
-                addPlayer(it, "Lecteur 1")
+            doc.selectFirst("meta[property=og:video]")?.attr("content")?.trim()?.let {
+                if (it !in players) players[it] = "Lecteur 1" to false
             }
             Regex(""""(?:embedUrl|contentUrl)"\s*:\s*"(https?://[^"]+)"""").findAll(html).forEach {
-                addPlayer(it.groupValues[1], "Lecteur ${players.size + 1}")
+                if (it.groupValues[1] !in players) players[it.groupValues[1]] = "Lecteur ${players.size + 1}" to false
             }
             knownHosts.forEach { host ->
                 Regex("""https?://[^"'\\\s<>]+""")
                     .findAll(html)
                     .map { it.value }
                     .filter { it.contains(host, ignoreCase = true) }
-                    .forEach { addPlayer(it, "Lecteur ${players.size + 1}") }
+                    .forEach {
+                        if (it !in players) players[it] = "Lecteur ${players.size + 1}" to false
+                    }
             }
         }
 
         var found = false
 
-        players.forEach { (embedUrl, label) ->
-            val loaded = runCatching {
-                loadExtractor(embedUrl, mainUrl, subtitleCallback, callback)
-            }.getOrDefault(false)
+        // Non-restricted players first, then the rest (matches the site's order)
+        players.entries.sortedBy { it.value.second }.forEach { (embedUrl, labelRestricted) ->
+            val label = labelRestricted.first
 
-            if (loaded) {
+            // Run the matching extractor (built-in or plugin) and count the links it produces:
+            // some built-in extractors "succeed" without emitting anything (e.g. Sendvid only
+            // handles m3u8 but serves mp4), which used to hide the extra servers.
+            var produced = 0
+            val countingCallback: (ExtractorLink) -> Unit = { link ->
+                produced++
+                callback(link)
+            }
+            runCatching {
+                loadExtractor(embedUrl, mainUrl, subtitleCallback, countingCallback)
+            }
+            if (produced > 0) {
                 found = true
-            } else {
-                // Generic fallback: fetch the embed page and look for direct streams
-                runCatching {
-                    val embedHtml = app.get(embedUrl, referer = mainUrl).text
-                    directStreamRegex.findAll(embedHtml).map { it.value }.distinct().forEach { link ->
-                        callback(
-                            newExtractorLink(name, "$name · $label", link) {
-                                this.referer = embedUrl
-                                this.quality = Qualities.Unknown.value
-                                this.type = if (link.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                            }
-                        )
-                        found = true
-                    }
-                }
+                return@forEach
+            }
+
+            // Generic fallback: fetch the embed page and look for direct streams
+            if (genericExtract(embedUrl, label, subtitleCallback, callback)) {
+                found = true
             }
         }
 
-        // 3) Direct video links straight in the episode page
+        // Direct video links straight in the episode page
         directStreamRegex.findAll(html).map { it.value }.distinct().forEach { link ->
             callback(
                 newExtractorLink(name, name, link) {
@@ -448,10 +522,61 @@ class AnimoFlixProvider : MainAPI() {
         return found
     }
 
+    /**
+     * Last-resort extraction for hosts without a working built-in extractor:
+     * loads the embed page and collects every direct stream found in it
+     * (og:video meta, <source> tags, jwplayer `file:` values, raw .m3u8/.mp4/.webm URLs).
+     */
+    private suspend fun genericExtract(
+        embedUrl: String,
+        label: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean = runCatching {
+        val page = app.get(
+            embedUrl,
+            referer = mainUrl,
+            headers = mapOf("user-agent" to USER_AGENT)
+        ).text
+
+        val links = LinkedHashSet<String>()
+
+        // <meta property="og:video(:secure_url)?" content="…"> and JSON-LD contentUrl/embedUrl
+        Regex("""(?:og:video(?::secure_url)?|contentUrl|embedUrl)"?\s*(?:content|=|:)\s*["']([^"']+)["']""")
+            .findAll(page).map { it.groupValues[1] }.forEach { links.add(it) }
+
+        // <source src="…"> / <video src="…">
+        Regex("""<(?:source|video)[^>]+src=["']([^"']+)["']""")
+            .findAll(page).map { it.groupValues[1] }.forEach { links.add(it) }
+
+        // jwplayer-ish: file: '…' / "file": "…" / src: "…"
+        Regex("""(?:file|src|url|source)\s*[=:]\s*["'](https?://[^"']+)["']""")
+            .findAll(page).map { it.groupValues[1] }.forEach { links.add(it) }
+
+        // Any direct stream URL anywhere in the page
+        directStreamRegex.findAll(page).map { it.value }.forEach { links.add(it) }
+
+        links.filter { it.startsWith("http") }
+            .map { it.replace("&amp;", "&") }
+            .filter { it.endsWith(".m3u8") || it.endsWith(".mp4") || it.endsWith(".webm") || directStreamRegex.matches(it) }
+            .distinct()
+            .forEach { link ->
+                callback(
+                    newExtractorLink(name, "$name · $label", link) {
+                        this.referer = embedUrl
+                        this.quality = Qualities.Unknown.value
+                        this.type = if (link.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    }
+                )
+            }
+
+        links.isNotEmpty()
+    }.getOrDefault(false)
+
     private val directStreamRegex = Regex("""https?://[^"'\\\s<>]+\.(?:m3u8|mp4|webm)[^"'\\\s<>]*""")
 
     private val knownHosts = listOf(
-        "sibnet", "sendvid", "vidmoly", "ansembed", "voe.sx", "voe-unblock", "dood",
+        "sibnet", "sendvid", "odysee", "vidmoly", "ansembed", "voe.sx", "voe-unblock", "dood",
         "mixdrop", "streamtape", "filemoon", "uqload", "vudeo", "streamwish",
         "ok.ru", "mp4upload", "yourupload", "streamlare", "supervideo", "upstream",
         "vidhide", "fastplay", "hqq.tv", "netu", "waaw", "megafz"

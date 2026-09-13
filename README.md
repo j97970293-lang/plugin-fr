@@ -8,7 +8,8 @@ Extension [CloudStream](https://github.com/recloudstream/cloudstream) pour **[an
 - **Recherche** : recherche serveur (`?search=`) + fallback autocomplete (reconnaît aussi les titres alternatifs)
 - **Fiches animes** : titre, poster, synopsis, genres, statut (en cours / terminé), titre alternatif
 - **Épisodes** : toutes les saisons parcourues automatiquement, VF et VOSTFR séparées (onglets « VOSTFR » / « VF » dans l'app), saisons spéciales (films, OAV, arcs) regroupées en saison 0
-- **Lecteurs** : détection automatique des hébergeurs via le sélecteur de lecteurs de la page épisode (SibNet, SendVid, AnsEmbed… + extracteur maison pour `ansembed.net`, clone VidMoly/JWPlayer) et fallback générique (mp4/m3u8)
+- **Lecteurs** : tous les lecteurs de la page épisode sont listés (SibNet, SendVid, AnsEmbed, Odysee…) — extracteurs maison pour `ansembed.net` (clone VidMoly/JWPlayer) et `odysee.com` (API LBRY), extracteurs intégrés CloudStream pour les autres, et fallback générique (og:video, `<source>`, `file:` mp4/m3u8) si un extracteur ne renvoie rien
+- **Miniatures** : chaque épisode affiche l'affiche de la fiche de l'anime
 - **Cloudflare** : le site est protégé par Cloudflare — l'extension utilise `CloudflareKiller` (résolution du challenge via WebView au premier lancement)
 
 ## 📥 Installation
@@ -18,14 +19,17 @@ Extension [CloudStream](https://github.com/recloudstream/cloudstream) pour **[an
 Avant même de pousser ce dépôt sur GitHub, vous pouvez tester l'extension en ajoutant ce `repo.json` public dans CloudStream (**Paramètres → Extensions → Ajouter un dépôt**) :
 
 ```
-https://x0.at/RluP.json
+https://x0.at/gMeP.json
 ```
 
-- `repo.json` : https://x0.at/RluP.json
-- `plugins.json` : https://x0.at/ACMv.json
-- `AnimoFlixProvider.cs3` (v1) : https://x0.at/VE76.cs3
+- `repo.json` (v2) : https://x0.at/gMeP.json
+- `plugins.json` : https://x0.at/aVsv.json
+- `AnimoFlixProvider.cs3` (v2) : https://x0.at/nrrJ.cs3
 
 > ⚠️ Hébergement temporaire (expiration sous quelques semaines/mois). Pour un lien pérenne, poussez le dépôt sur GitHub — le workflow publiera tout automatiquement sur la branche `builds`.
+> ℹ️ Si vous aviez ajouté l'ancienne URL de test (v1, `x0.at/RluP.json`) : supprimez d'abord ce dépôt et l'extension dans CloudStream, puis ajoutez la nouvelle ci-dessus.
+
+**v2** : tous les serveurs/lecteurs de la page épisode sont maintenant listés (y compris SendVid, AnsEmbed et Odysee via un extracteur dédié + un fallback générique mp4/m3u8), et les épisodes affichent la miniature de la fiche de l'anime.
 
 ### Méthode 1 — Ajouter le dépôt (recommandé)
 
