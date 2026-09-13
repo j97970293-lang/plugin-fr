@@ -13,6 +13,20 @@ Extension [CloudStream](https://github.com/recloudstream/cloudstream) pour **[an
 
 ## 📥 Installation
 
+### Méthode 0 — Test immédiat (hébergement public temporaire)
+
+Avant même de pousser ce dépôt sur GitHub, vous pouvez tester l'extension en ajoutant ce `repo.json` public dans CloudStream (**Paramètres → Extensions → Ajouter un dépôt**) :
+
+```
+https://x0.at/RluP.json
+```
+
+- `repo.json` : https://x0.at/RluP.json
+- `plugins.json` : https://x0.at/ACMv.json
+- `AnimoFlixProvider.cs3` (v1) : https://x0.at/VE76.cs3
+
+> ⚠️ Hébergement temporaire (expiration sous quelques semaines/mois). Pour un lien pérenne, poussez le dépôt sur GitHub — le workflow publiera tout automatiquement sur la branche `builds`.
+
 ### Méthode 1 — Ajouter le dépôt (recommandé)
 
 Dans CloudStream : **Paramètres → Extensions → Ajouter un dépôt** et coller l'URL `repo.json` de la branche `builds` de ce dépôt :
