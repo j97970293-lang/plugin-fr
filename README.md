@@ -39,7 +39,7 @@ Dans CloudStream : **Paramètres → Extensions → Ajouter un dépôt** et coll
 https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/repo.json
 ```
 
-> Remplacez `j97970293-lang` par le propriétaire GitHub du dépôt. Le workflow GitHub Actions construit et publie automatiquement `AnimoFlixProvider.cs3` + `plugins.json` + `repo.json` sur la branche `builds` à chaque push.
+> Le workflow GitHub Actions construit et publie automatiquement `AnimoFlixProvider.cs3` + `plugins.json` + `repo.json` sur la branche `builds` à chaque push.
 
 ### Méthode 2 — Installer le fichier directement
 
