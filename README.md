@@ -9,6 +9,17 @@ Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream)
 | **WaveWatchProvider** | [wavewatch.top](https://wavewatch.top/) | films, séries, animes & **TV en direct** en VF / VOSTFR |
 | **AfterdarkProvider** | [afd926.mom](https://afd926.mom/) (miroir de afterdark.best) | films & séries en **VOSTFR** (multi-serveurs) |
 
+
+## 🔄 Mises à jour du 14 septembre 2026
+
+| Extension | Nouveautés |
+|---|---|
+| **Toutes** | Bouton **« Réglages »** sur la fiche de l'extension pour **changer l'adresse du site** (miroirs, déménagements) — sans réinstaller |
+| Zenix / WaveWatch / Afterdark | **One Piece & animes longs réparés** : secours **AnimoFlix** intégré (derniers épisodes VOSTFR inclus, vérification anti-mauvais-épisode), + purge des liens « mauvais épisode » de playerix (TV) et mouve (TV) |
+| AnimoFlix | Miniatures des épisodes **comme avant** : le numéro d'épisode est de nouveau visible |
+
+📚 **[TUTO.md](TUTO.md)** — guide complet (écrit pour être lisible par une IA) : créer une extension CloudStream, analyser un site de streaming, la stack d'agrégateurs, tous les pièges rencontrés.
+
 ---
 
 # AnimoFlix · Extension CloudStream (`.cs3`)
@@ -49,6 +60,8 @@ https://x0.at/gMeP.json
 
 > ⚠️ Hébergement temporaire (expiration sous quelques semaines/mois). Pour un lien pérenne, poussez le dépôt sur GitHub — le workflow publiera tout automatiquement sur la branche `builds`.
 > ℹ️ Si vous aviez ajouté l'ancienne URL de test (v1, `x0.at/RluP.json`) : supprimez d'abord ce dépôt et l'extension dans CloudStream, puis ajoutez la nouvelle ci-dessus.
+
+**v3** : bouton « Réglages » pour changer l'adresse du site ; miniatures des épisodes comme avant (numéro visible).
 
 **v2** : tous les serveurs/lecteurs de la page épisode sont maintenant listés (y compris SendVid, AnsEmbed et Odysee via un extracteur dédié + un fallback générique mp4/m3u8), et les épisodes affichent la miniature de la fiche de l'anime.
 
@@ -96,6 +109,8 @@ Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement :
 - **`.cs3` v2** : release [**zenix-v2 (Pre-release)**](https://github.com/j97970293-lang/plugin-fr/releases/tag/zenix-v2) → **Paramètres → Extensions → Installer un fichier**
 - Miroirs x0.at : `repo.json` → https://x0.at/M5wA.json · `plugins.json` → https://x0.at/k3u9.json · `ZenixProvider.cs3` v2 → https://x0.at/uVYD.cs3
 
+**v3** : bouton « Réglages » pour changer l'adresse du site ; secours anime AnimoFlix (One Piece & co, derniers épisodes inclus) ; en TV seuls les liens playerix fiables (HLS) sont gardés — les iframes renvoyaient le même épisode pour tous.
+
 **v2** : correction de l'erreur 3003 « Source error » (filtre anti-faux-positifs), bien plus de sources (1embed HLS + apiwiflix + playerix + movix + french-stream + PrimeSrc + les 24 boutons du site, avec **HLS directs** playerix), recherche corrigée (API suggest uniquement — la route HTML ne filtrait pas) et **langue VF/VOSTFR affichée sur chaque lien**.
 
 ## 🔨 Compiler soi-même
@@ -117,6 +132,8 @@ Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement :
 ---
 
 # WaveWatch · Extension CloudStream (`.cs3`)
+
+> **v2** : bouton « Réglages » pour changer l'adresse du site ; secours anime AnimoFlix (One Piece & co, derniers épisodes inclus) ; en TV seuls les liens playerix/mouve fiables sont gardés (les autres renvoyaient le même épisode pour tous).
 
 Extension pour **[wavewatch.top](https://wavewatch.top/)** — plateforme de streaming FR (catalogue TMDB) : films, séries, animes et **chaînes TV en direct**.
 
@@ -209,6 +226,8 @@ Projet à but éducatif. CloudStream et cette extension ne hébergent aucun cont
 
 # Afterdark · Extension CloudStream (`.cs3`)
 
+> **v2** : bouton « Réglages » pour changer l'adresse du site ; secours anime AnimoFlix (One Piece & co, derniers épisodes inclus) ; en TV seuls les liens playerix/mouve fiables sont gardés (les autres renvoyaient le même épisode pour tous).
+
 Extension pour **[afd926.mom](https://afd926.mom/)** (miroir actif de `afterdark.best`) — films et séries en **VOSTFR**.
 
 - **Catalogue** : les données TMDB du site, servies en français (tendances films & séries, prochaines sorties, découvertes par genre, recherche multi).
@@ -225,8 +244,13 @@ Extension pour **[afd926.mom](https://afd926.mom/)** (miroir actif de `afterdark
 
 | Extension | Fichier | Miroir x0.at |
 |---|---|---|
-| Afterdark | [AfterdarkProvider.cs3](releases/AfterdarkProvider.cs3) | [AfterdarkProvider.cs3](https://x0.at/JArM.cs3) |
+| Afterdark v2 | [AfterdarkProvider.cs3](releases/AfterdarkProvider.cs3) | [AfterdarkProvider.cs3](https://x0.at/mE4M.cs3) |
+| AnimoFlix v3 | [AnimoFlixProvider.cs3](releases/AnimoFlixProvider.cs3) | [AnimoFlixProvider.cs3](https://x0.at/emFN.cs3) |
+| WaveWatch v2 | [WaveWatchProvider.cs3](releases/WaveWatchProvider.cs3) | [WaveWatchProvider.cs3](https://x0.at/Ifc1.cs3) |
+| Zenix v3 | [ZenixProvider.cs3](releases/ZenixProvider.cs3) | [ZenixProvider.cs3](https://x0.at/oqsU.cs3) |
 
 | Dépôt (repo.json) | Liste d'extensions (plugins.json) |
 |---|---|
-| https://x0.at/zk3V.json | https://x0.at/RGc5.json |
+| https://x0.at/PEvE.json | https://x0.at/hkF6.json |
+
+> ⚠️ Nouveaux miroirs du 14/09 — si vous utilisez les anciens (`zk3V`/`RGc5`…), remplacez-les par ceux-ci (ils resteront valides, mais ceux-ci servent les nouvelles versions).

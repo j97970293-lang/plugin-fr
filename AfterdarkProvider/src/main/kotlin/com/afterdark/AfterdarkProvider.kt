@@ -1,5 +1,6 @@
 package com.afterdark
 
+import android.content.Context
 import android.util.Base64
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
@@ -16,14 +17,15 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.mainPageOf
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
-import com.lagradost.cloudstream3.plugins.BasePlugin
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
+import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.cloudstream3.utils.AppUtils
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -36,16 +38,51 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 /**
  * Entry point of the plugin, this is the class that CloudStream loads.
  */
 @CloudstreamPlugin
-class AfterdarkPlugin : BasePlugin() {
-    override fun load() {
+class AfterdarkPlugin : Plugin() {
+    override fun load(context: Context) {
+        AfterdarkProvider.appContext = context.applicationContext
         registerMainAPI(AfterdarkProvider())
-        // Lecteur 1embed.cc : playlists HLS (format proxy ou /v/*.m3u8)
+        // Lecteurs : 1embed.cc (playlists HLS) + ansembed.net ( JWPlayer, secours AnimoFlix )
         registerExtractorAPI(OneEmbed())
+        registerExtractorAPI(AnsEmbed())
+        // Réglages : bouton « Réglages » sur la fiche de l'extension dans CloudStream
+        openSettings = { ctx -> AfterdarkProvider.showSettings(ctx) }
+    }
+}
+
+/**
+ * ansembed.net — hébergeur JWPlayer (clone VidMoly) utilisé par AnimoFlix.
+ * Extrait `sources: [{ file: 'https://…/master.m3u8' }]` de la page d'embed.
+ */
+class AnsEmbed : ExtractorApi() {
+    override val name = "AnsEmbed"
+    override val mainUrl = "https://ansembed.net"
+    override val requiresReferer = true
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val headers = mapOf(
+            "user-agent" to USER_AGENT,
+            "Sec-Fetch-Dest" to "iframe"
+        )
+        val document = app.get(url, headers = headers, referer = referer).document
+        val script = document.select("script")
+            .firstOrNull { it.data().contains("sources:") }
+            ?.data()
+            ?: throw ErrorLoadingException("No JWPlayer sources found")
+        com.lagradost.cloudstream3.extractors.helper.JwPlayerHelper
+            .extractStreamLinks(script, name, mainUrl, callback, subtitleCallback)
     }
 }
 
@@ -117,13 +154,15 @@ class OneEmbed : ExtractorApi() {
  *    l'extension WaveWatch — les données TMDB sont identiques).
  *  · Lecture : les 3 lecteurs publics de secours du site lui-même (videasy,
  *    frembed.skin, peachify — URL exactes tirées de son bundle) + un arsenal
- *    d'agrégateurs TMDB en parallèle : apiwiflix, playerix, zeus (SSE), mouve,
- *    movix, french-stream, 1embed — soit 60 à 200+ liens par contenu, avec la
- *    langue (VOSTFR d'abord) affichée sur chaque lien.
+ *    d'agrégateurs TMDB en parallèle : apiwiflix, playerix (HLS), zeus (SSE),
+ *    movix, french-stream, 1embed + les épisodes d'animes d'AnimoFlix
+ *    (utile pour les derniers épisodes de One Piece & co, que les agrégateurs
+ *    n'ont pas) — soit 40 à 60+ liens par contenu, avec la langue (VOSTFR
+ *    d'abord) affichée sur chaque lien.
  */
 class AfterdarkProvider : MainAPI() {
 
-    override var mainUrl = "https://afd926.mom"
+    override var mainUrl = DEFAULT_URL
     override var name = "Afterdark"
     override var lang = "fr"
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
@@ -162,9 +201,83 @@ class AfterdarkProvider : MainAPI() {
     )
 
     // -------------------------------------------------------------------------
+    // Réglages : adresse du site modifiable (miroirs / changement de domaine)
+    // -------------------------------------------------------------------------
+    companion object {
+        const val DEFAULT_URL = "https://afd926.mom"
+
+        @Volatile
+        var appContext: Context? = null
+
+        private const val PREFS_NAME = "afterdark_settings"
+        private const val PREF_URL = "site_url"
+
+        /** Adresse actuelle : réglage utilisateur si défini, sinon celle par défaut. */
+        fun currentUrl(): String = runCatching {
+            appContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                ?.getString(PREF_URL, null)
+                ?.trim()?.trimEnd('/')
+                ?.takeIf { it.startsWith("http") }
+        }.getOrNull() ?: DEFAULT_URL
+
+        fun setSiteUrl(context: Context, url: String?) {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_URL, url?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") })
+                .apply()
+        }
+
+        /** Bouton « Réglages » de l'extension : boîte de dialogue pour changer l'adresse. */
+        fun showSettings(context: Context) {
+            val input = android.widget.EditText(context).apply {
+                setText(currentUrl())
+                hint = "https://…"
+            }
+            val pad = (context.resources.displayMetrics.density * 20).toInt()
+            val layout = android.widget.LinearLayout(context).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(pad, pad / 2, pad, 0)
+                addView(
+                    android.widget.TextView(context).apply {
+                        text = "Adresse du site Afterdark (à changer s'il déménage) :"
+                    }
+                )
+                addView(input)
+            }
+            android.app.AlertDialog.Builder(context)
+                .setTitle("Afterdark")
+                .setView(layout)
+                .setPositiveButton("Enregistrer") { _, _ ->
+                    val value = input.text.toString().trim()
+                    if (value.startsWith("http")) {
+                        setSiteUrl(context, value)
+                        toast(context, "Adresse enregistrée : $value")
+                    } else {
+                        toast(context, "Adresse invalide : elle doit commencer par https://")
+                    }
+                }
+                .setNeutralButton("Par défaut") { _, _ ->
+                    setSiteUrl(context, null)
+                    toast(context, "Adresse par défaut restaurée : $DEFAULT_URL")
+                }
+                .setNegativeButton("Annuler", null)
+                .show()
+        }
+
+        private fun toast(context: Context, message: String) =
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+    }
+
+    /** Applique l'adresse personnalisée à chaque requête. */
+    private fun syncUrl() {
+        mainUrl = currentUrl()
+    }
+
+    // -------------------------------------------------------------------------
     // Page d'accueil (sections TMDB en français)
     // -------------------------------------------------------------------------
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        syncUrl()
         val data = request.data
         val paged = data.startsWith("paged:")
         if (!paged && page > 1) return newHomePageResponse(request.name, emptyList())
@@ -203,6 +316,7 @@ class AfterdarkProvider : MainAPI() {
     // Recherche (multi : films + séries)
     // -------------------------------------------------------------------------
     override suspend fun search(query: String): List<SearchResponse> {
+        syncUrl()
         val trimmed = query.trim()
         if (trimmed.length < 2) return emptyList()
         return runCatching {
@@ -220,6 +334,7 @@ class AfterdarkProvider : MainAPI() {
     // Détail
     // -------------------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse {
+        syncUrl()
         val tmdb = Regex("""/(movie|tv)/(\d+)""").find(url)?.groupValues?.get(2)
             ?: throw ErrorLoadingException("URL non reconnue : $url")
 
@@ -245,30 +360,62 @@ class AfterdarkProvider : MainAPI() {
         )
         val title = detail.name?.trim()?.takeIf { it.isNotBlank() } ?: "Série"
         val seasons = detail.seasons?.filter { (it.seasonNumber ?: 0) > 0 && (it.episodeCount ?: 0) > 0 }.orEmpty()
+        // Le secours anime (AnimoFlix) n'est activé que pour les dessins animés/animes
+        // (genre Animation) ou les très longues séries — évite les confusions de titres.
+        val isAnimation = detail.genres.orEmpty().any {
+            it.name.equals("Animation", true) || it.name.equals("Animération", true)
+        }
 
-        val episodes = coroutineScope {
+        // (saison, épisode, sIndex = place dans la saison, absIndex = place absolue)
+        data class RawEp(
+            val season: Int, val number: Int, val sIndex: Int, val absIndex: Int,
+            val name: String?, val still: String?, val overview: String?,
+            val runtime: Int?, val score: Double?
+        )
+
+        val rawEpisodes = coroutineScope {
             seasons.map { season ->
                 async(Dispatchers.IO) {
                     runCatching {
                         val n = season.seasonNumber!!
                         val json = app.get("$tmdbProxy/tv/$tmdb/season/$n", headers = baseHeaders).text
-                        AppUtils.parseJson<WwSeasonDetail>(json).episodes.orEmpty().mapNotNull { ep ->
-                            val epNumber = ep.episodeNumber ?: return@mapNotNull null
-                            newEpisode("$mainUrl/tv/$tmdb/$n/$epNumber") {
-                                this.name = ep.name?.trim()?.takeIf { it.isNotBlank() && it != "Épisode $epNumber" }
-                                    ?: "Épisode $epNumber"
-                                this.season = n
-                                this.episode = epNumber
-                                this.posterUrl = ep.stillPath?.let { "$tmdbImage/w500$it" }
-                                this.description = ep.overview?.trim()?.takeIf { it.isNotBlank() }
-                                this.score = ep.voteAverage?.let { Score.from10(it) }
-                                this.runTime = ep.runtime
-                            }
+                        val eps = AppUtils.parseJson<WwSeasonDetail>(json).episodes.orEmpty()
+                            .filter { (it.episodeNumber ?: 0) > 0 }
+                            .sortedBy { it.episodeNumber }
+                        val first = eps.firstOrNull()?.episodeNumber ?: 0
+                        eps.mapIndexed { idx, ep ->
+                            RawEp(
+                                n, ep.episodeNumber!!,
+                                (ep.episodeNumber!! - first + 1), (ep.episodeNumber!! - first + 1), // absIndex corrigé après
+                                ep.name, ep.stillPath, ep.overview, ep.runtime, ep.voteAverage
+                            )
                         }
                     }.getOrDefault(emptyList())
                 }
             }.awaitAll().flatten()
-        }.sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 }))
+        }.sortedWith(compareBy({ it.season }, { it.number }))
+
+        // Index absolus : position cumulée sur toute la série (1er épisode = 1)
+        var absBase = 0
+        val perSeasonCounts = rawEpisodes.groupBy { it.season }
+        val episodes = rawEpisodes.map { raw ->
+            val absIndex = absBase + raw.absIndex
+            val isLast = perSeasonCounts[raw.season]?.lastOrNull() === raw
+            if (isLast) absBase += perSeasonCounts[raw.season]!!.size
+            val afFlag = if (isAnimation || rawEpisodes.size >= 60) 1 else 0
+            val packed = "?t=" + URLEncoder.encode(title, "UTF-8") +
+                "&i=${raw.sIndex}&a=$absIndex&af=$afFlag"
+            newEpisode("$mainUrl/tv/$tmdb/${raw.season}/${raw.number}$packed") {
+                this.name = raw.name?.trim()?.takeIf { it.isNotBlank() && it != "Épisode ${raw.number}" }
+                    ?: "Épisode ${raw.number}"
+                this.season = raw.season
+                this.episode = raw.number
+                this.posterUrl = raw.still?.let { "$tmdbImage/w500$it" }
+                this.description = raw.overview?.trim()?.takeIf { it.isNotBlank() }
+                this.score = raw.score?.let { Score.from10(it) }
+                this.runTime = raw.runtime
+            }
+        }
 
         return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
             this.posterUrl = detail.posterPath?.let { "$tmdbImage/w500$it" }
@@ -289,19 +436,27 @@ class AfterdarkProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val m = Regex("""/tv/(\d+)/(\d+)/(\d+)|/movie/(\d+)""").find(data)
+        syncUrl()
+        val m = Regex("""/tv/(\d+)/(\d+)/(\d+)(?:\?([^#]*))?|/movie/(\d+)""").find(data)
             ?: return false
         val tmdb: String
         var season: Int? = null
         var episode: Int? = null
+        val params: Map<String, String>
         if (m.groupValues[1].isNotEmpty()) {
             tmdb = m.groupValues[1]
             season = m.groupValues[2].toIntOrNull()
             episode = m.groupValues[3].toIntOrNull()
+            params = parseParams(m.groupValues[4])
         } else {
-            tmdb = m.groupValues[4]
+            tmdb = m.groupValues[5]
+            params = emptyMap()
         }
         val isTv = season != null
+        val showTitle = params["t"]
+        val seasonIndex = params["i"]?.toIntOrNull()
+        val absIndex = params["a"]?.toIntOrNull()
+        val animeAllowed = params["af"] == "1"
 
         var found = false
         val lock = Any()
@@ -316,14 +471,19 @@ class AfterdarkProvider : MainAPI() {
         }
 
         coroutineScope {
-            val aggregators = listOf(
-                async(Dispatchers.IO) { runCatching { apiwiflixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) },
-                async(Dispatchers.IO) { runCatching { playerixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) },
-                async(Dispatchers.IO) { runCatching { zeusLinks(tmdb, season, episode) }.getOrDefault(emptyList()) },
-                async(Dispatchers.IO) { runCatching { movixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) },
-                async(Dispatchers.IO) { runCatching { movixFstreamLinks(tmdb, season) }.getOrDefault(emptyList()) },
-                async(Dispatchers.IO) { runCatching { mouveLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
-            )
+            val aggregators = mutableListOf<kotlinx.coroutines.Deferred<List<HostLink>>>()
+            aggregators += async(Dispatchers.IO) { runCatching { apiwiflixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
+            // playerix : en TV seuls les boutons HLS (data-fmt="m3u8") sont fiables —
+            // les boutons iframe renvoient les mêmes liens pour tous les épisodes (vérifié).
+            aggregators += async(Dispatchers.IO) { runCatching { playerixLinks(tmdb, season, episode, m3u8Only = isTv) }.getOrDefault(emptyList()) }
+            aggregators += async(Dispatchers.IO) { runCatching { zeusLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
+            aggregators += async(Dispatchers.IO) { runCatching { movixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
+            aggregators += async(Dispatchers.IO) { runCatching { movixFstreamLinks(tmdb, season) }.getOrDefault(emptyList()) }
+            // mouve : films uniquement — en TV la majorité des liens ne dépendent pas
+            // de l'épisode demandé (vérifié : mêmes URLs pour 2x1 et 2x2).
+            if (!isTv) {
+                aggregators += async(Dispatchers.IO) { runCatching { mouveLinks(tmdb, null, null) }.getOrDefault(emptyList()) }
+            }
 
             // ---- 1embed : playlists HLS directes (fiable) ----
             async(Dispatchers.IO) {
@@ -337,9 +497,16 @@ class AfterdarkProvider : MainAPI() {
                 }
             }
 
+            // ---- AnimoFlix : épisodes d'animes (One Piece & co), y compris les tout derniers ----
+            if (isTv && animeAllowed && showTitle != null && seasonIndex != null && absIndex != null) {
+                aggregators += async(Dispatchers.IO) {
+                    runCatching { animoflixLinks(showTitle, season!!, seasonIndex, absIndex) }.getOrDefault(emptyList())
+                }
+            }
+
             aggregators.awaitAll().forEach { addHostLinks(it) }
 
-            // ---- Lecteurs de secours du site + lecteurs publics TMDB ----
+            // ---- Lecteurs de secours du site + lecteurs publics ----
             addHostLinks(fallbackEmbeds(tmdb, season, episode))
         }
 
@@ -354,8 +521,8 @@ class AfterdarkProvider : MainAPI() {
                 else -> 5
             }
             val originP = when (hl.origin) {
-                "zeus" -> 0; "apiwiflix" -> 1; "playerix" -> 2; "movix" -> 3
-                "fstream" -> 4; "mouve" -> 5; "site" -> 6; "embed" -> 7; else -> 8
+                "zeus" -> 0; "animoflix" -> 1; "apiwiflix" -> 2; "playerix" -> 3; "movix" -> 4
+                "fstream" -> 5; "site" -> 6; "embed" -> 7; "animoflix-r" -> 8; else -> 9
             }
             return langP * 10 + originP
         }
@@ -413,6 +580,18 @@ class AfterdarkProvider : MainAPI() {
         return found
     }
 
+    /** Paramètres de l'URL de données (?t=…&i=…&a=…&af=…). */
+    private fun parseParams(query: String): Map<String, String> {
+        if (query.isBlank()) return emptyMap()
+        return Regex("""(?:^|&)([a-z]+)=([^&]*)""")
+            .findAll(query)
+            .associate {
+                it.groupValues[1] to runCatching {
+                    URLDecoder.decode(it.groupValues[2], "UTF-8")
+                }.getOrDefault(it.groupValues[2])
+            }
+    }
+
     /** Ré-étiquette un lien avec sa langue (« Filemoon · VOSTFR ») pour l'utilisateur. */
     private fun relabel(link: ExtractorLink, lang: String?): ExtractorLink {
         if (lang.isNullOrBlank()) return link
@@ -430,6 +609,106 @@ class AfterdarkProvider : MainAPI() {
     }
 
     // -------------------------------------------------------------------------
+    // Secours anime — épisodes d'animoflix.to (One Piece, Naruto, démons & co).
+    // animoflix a les DERNIERS épisodes VOSTFR là où les agrégateurs culbutent,
+    // avec un hébergeur maison (ansembed, HLS) + sibnet.
+    // -------------------------------------------------------------------------
+    private val animoflixCf by lazy { CloudflareKiller() }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class AfSuggestion(
+        @JsonProperty("title") val title: String? = null,
+        @JsonProperty("slug") val slug: String? = null
+    )
+
+    /** Titre normalisé (minuscules, sans accents ni ponctuation) pour comparer. */
+    private fun normalizeTitle(s: String): String =
+        java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9]"), "")
+
+    /** Trouve l'anime sur animoflix.to par son titre (autocomplétion du site). */
+    private suspend fun animoflixSlug(title: String): String? {
+        val json = runCatching {
+            app.get(
+                "https://animoflix.to/search-autocomplete.php",
+                params = mapOf("q" to title),
+                interceptor = animoflixCf
+            ).text
+        }.getOrNull() ?: return null
+        val suggestions = AppUtils.tryParseJson<Array<AfSuggestion>>(json) ?: return null
+        val wanted = normalizeTitle(title)
+        return suggestions.firstOrNull { normalizeTitle(it.title ?: "") == wanted }?.slug
+            ?: suggestions.firstOrNull {
+                it.title != null && suggestions.size == 1 &&
+                    (wanted.contains(normalizeTitle(it.title!!)) || normalizeTitle(it.title!!).contains(wanted))
+            }?.slug
+    }
+
+    /**
+     * Épisode d'un anime sur animoflix.to. Le site numérote PAR SAISON (saison-N),
+     * essentiellement le même découpage que TMDB — on essaie aussi les variantes
+     * « sans saison / numéro absolu » et « saison 1 / numéro absolu » utilisées
+     * par d'autres animes. Chaque page est VÉRIFIÉE (le titre doit contenir
+     * « Épisode {n} ») car une page inexistante redirige en douce vers l'épisode 1.
+     */
+    private suspend fun animoflixLinks(
+        title: String,
+        season: Int,
+        seasonIndex: Int,
+        absIndex: Int
+    ): List<HostLink> {
+        val slug = animoflixSlug(title) ?: return emptyList()
+        val out = mutableListOf<HostLink>()
+
+        val variants = mutableListOf<Pair<String, String>>()
+        if (!outHasLang(out, "VOSTFR")) variants += "saison-$season/vostfr/episode-$seasonIndex" to "VOSTFR"
+        variants += listOf(
+            "vostfr/episode-$absIndex" to "VOSTFR",
+            "saison-1/vostfr/episode-$absIndex" to "VOSTFR",
+            "saison-$season/vf/episode-$seasonIndex" to "VF",
+            "vf/episode-$absIndex" to "VF",
+            "saison-1/vf/episode-$absIndex" to "VF"
+        )
+
+        for ((path, lang) in variants) {
+            if (outHasLang(out, lang)) continue
+            val url = "https://animoflix.to/anime/$slug/$path"
+            val html = runCatching {
+                app.get(url, interceptor = animoflixCf).text
+            }.getOrNull() ?: continue
+
+            // Vérification : la page doit bien être celle de l'épisode demandé
+            val requested = Regex("""episode-(\d+)$""").find(path)?.groupValues?.get(1) ?: continue
+            val pageTitle = Regex("""<title>([^<]*)</title>""").find(html)?.groupValues?.get(1) ?: continue
+            if (!Regex("""\b[pé]+isode\s*$requested(\D|$)""", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(java.text.Normalizer.normalize(pageTitle, java.text.Normalizer.Form.NFD))
+            ) continue
+
+            val select = Regex(
+                """<select[^>]*id="epLecteurSelect"[^>]*>(.*?)</select>""",
+                RegexOption.DOT_MATCHES_ALL
+            ).find(html)
+            val options = select?.let {
+                Regex("""<option([^>]*)>([^<]*)</option>""").findAll(it.groupValues[1]).toList()
+            } ?: emptyList()
+            for (opt in options) {
+                val value = Regex("""value="([^"]+)"""").find(opt.groupValues[1])?.groupValues?.get(1) ?: continue
+                if (!value.startsWith("http")) continue
+                val restricted = """data-restricted="true"""" in opt.groupValues[1]
+                val label = opt.groupValues[2].trim().ifBlank { "Lecteur" }
+                out += HostLink(
+                    value, lang, "AnimoFlix $label",
+                    if (restricted) "animoflix-r" else "animoflix"
+                )
+            }
+        }
+        return out
+    }
+
+    private fun outHasLang(list: List<HostLink>, lang: String) = list.any { it.lang == lang }
+
+    // -------------------------------------------------------------------------
     // Lecteurs de secours publics — les 3 du site (URL tirées de son bundle)
     // + d'autres lecteurs publics compatibles TMDB (tous testés vivants)
     // -------------------------------------------------------------------------
@@ -437,7 +716,6 @@ class AfterdarkProvider : MainAPI() {
         val out = mutableListOf<HostLink>()
 
         // --- Les lecteurs de secours du site Afterdark lui-même ---
-        // videasy (lecteur n°1 du site)
         out += if (season != null) {
             HostLink(
                 "https://player.videasy.net/tv/$tmdb/$season/$episode?overlay=true&color=8B5CF6&nextEpisode=true&episodeSelector=true",
@@ -446,13 +724,11 @@ class AfterdarkProvider : MainAPI() {
         } else {
             HostLink("https://player.videasy.net/movie/$tmdb?overlay=true&color=8B5CF6", null, "Videasy", "site")
         }
-        // frembed
         out += if (season != null) {
             HostLink("https://frembed.skin/embed/serie/$tmdb?sa=$season&epi=$episode", null, "Frembed", "site")
         } else {
             HostLink("https://frembed.skin/embed/movie/$tmdb", null, "Frembed", "site")
         }
-        // peachify (Cloudflare : peut fonctionner depuis l'appareil de l'utilisateur)
         out += if (season != null) {
             HostLink(
                 "https://peachify.top/embed/tv/$tmdb/$season/$episode?dub=French&sub=French&autoNext=30",
@@ -510,8 +786,14 @@ class AfterdarkProvider : MainAPI() {
     }
 
     /** apis.wavewatch.top/playerix.php — boutons data-url avec langue + HLS directs.
-     *  NB : l'API ignore « saison= » — paramètres anglais obligatoires. */
-    private suspend fun playerixLinks(tmdb: String, season: Int?, episode: Int?): List<HostLink> {
+     *  En TV (m3u8Only=true), seuls les boutons HLS sont retenus : les iframes ne
+     *  dépendent pas de l'épisode demandé (mêmes URLs pour tous les épisodes, vérifié). */
+    private suspend fun playerixLinks(
+        tmdb: String,
+        season: Int?,
+        episode: Int?,
+        m3u8Only: Boolean = false
+    ): List<HostLink> {
         val url = if (season != null && episode != null) {
             "https://apis.wavewatch.top/playerix.php?type=tv&id=$tmdb&season=$season&episode=$episode"
         } else {
@@ -527,6 +809,7 @@ class AfterdarkProvider : MainAPI() {
                 val dataUrl = Regex("""data-url="([^"]+)"""").find(attrs)?.groupValues?.get(1) ?: return@forEach
                 val fmt = Regex("""data-fmt="([^"]*)"""").find(attrs)?.groupValues?.get(1) ?: "iframe"
                 if (Regex("""data-alive="0"""").containsMatchIn(attrs)) return@forEach
+                if (m3u8Only && fmt != "m3u8") return@forEach
                 val lang = Regex("""class="lang"[^>]*>\s*([^<]+)""").find(content)?.groupValues?.get(1)
                     ?.trim()?.split(" ")?.lastOrNull() // « 🇫🇷 VF » -> VF
                     ?.takeIf { it.isNotBlank() && it != "?" }
@@ -555,8 +838,6 @@ class AfterdarkProvider : MainAPI() {
             append("&id=").append(tmdb)
             append("&s=").append(season ?: 1).append("&e=").append(episode ?: 1)
         }
-        // Le serveur ferme le flux après l'événement « done » (~10 s) : la réponse
-        // complète arrive d'un bloc, on parse chaque « data: {json} ».
         val body = app.get(url, headers = baseHeaders).text
         val out = mutableListOf<HostLink>()
         Regex("""data:\s*(\{.*?\})\s*\n""", RegexOption.DOT_MATCHES_ALL).findAll(body).forEach { m ->
@@ -577,7 +858,8 @@ class AfterdarkProvider : MainAPI() {
         return out
     }
 
-    /** mouve.php?json=1 — un grand agrégateur (39–75 flux par contenu). */
+    /** mouve.php?json=1 — grand agrégateur (films uniquement : en TV les liens
+     *  ne dépendent pas de l'épisode, vérifié). */
     private suspend fun mouveLinks(tmdb: String, season: Int?, episode: Int?): List<HostLink> {
         val url = buildString {
             append("https://apis.wavewatch.top/mouve.php?json=1&type=")
@@ -592,7 +874,6 @@ class AfterdarkProvider : MainAPI() {
             val u = s.url ?: return@forEach
             val format = s.format?.lowercase()
             if (format == "hls") {
-                // Certains flux passent par un proxy : mouve.php?ep=m3u8&url={réel}
                 val real = Regex("""[?&]url=([^&]+)""").find(u)?.groupValues?.get(1)
                     ?.let { decodeUrlParam(it) } ?: u
                 if (real.startsWith("http") && real.contains(".m3u8")) {
@@ -602,7 +883,7 @@ class AfterdarkProvider : MainAPI() {
             }
             if (!u.startsWith("http")) return@forEach
             val host = hostOf(u)
-            if (host in seenHosts) return@forEach // un seul miroir par hébergeur
+            if (host in seenHosts) return@forEach
             seenHosts += host
             out += HostLink(u, null, host, "mouve")
         }

@@ -4,6 +4,7 @@ import android.util.Base64
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.Episode
+import com.lagradost.cloudstream3.ErrorLoadingException
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
@@ -24,7 +25,7 @@ import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.network.CloudflareKiller
-import com.lagradost.cloudstream3.plugins.BasePlugin
+import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.utils.AppUtils
 import com.lagradost.cloudstream3.utils.ExtractorApi
@@ -45,11 +46,45 @@ import org.jsoup.nodes.Element
  * Entry point of the plugin, this is the class that CloudStream loads.
  */
 @CloudstreamPlugin
-class ZenixPlugin : BasePlugin() {
-    override fun load() {
+class ZenixPlugin : Plugin() {
+    override fun load(context: android.content.Context) {
+        ZenixProvider.appContext = context.applicationContext
         registerMainAPI(ZenixProvider())
         // Custom extractor for 1embed.cc (direct HLS playlists in the page)
         registerExtractorAPI(OneEmbed())
+        // ansembed.net (JWPlayer) — hébergeur du secours anime AnimoFlix
+        registerExtractorAPI(AnsEmbed())
+        // Bouton « Réglages » sur la fiche de l'extension dans CloudStream
+        openSettings = { ctx -> ZenixProvider.showSettings(ctx) }
+    }
+}
+
+/**
+ * ansembed.net — hébergeur JWPlayer (clone VidMoly) utilisé par AnimoFlix.
+ * Extrait `sources: [{ file: 'https://…/master.m3u8' }]` de la page d'embed.
+ */
+class AnsEmbed : ExtractorApi() {
+    override val name = "AnsEmbed"
+    override val mainUrl = "https://ansembed.net"
+    override val requiresReferer = true
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val headers = mapOf(
+            "user-agent" to USER_AGENT,
+            "Sec-Fetch-Dest" to "iframe"
+        )
+        val document = app.get(url, headers = headers, referer = referer).document
+        val script = document.select("script")
+            .firstOrNull { it.data().contains("sources:") }
+            ?.data()
+            ?: throw ErrorLoadingException("No JWPlayer sources found")
+        com.lagradost.cloudstream3.extractors.helper.JwPlayerHelper
+            .extractStreamLinks(script, name, mainUrl, callback, subtitleCallback)
     }
 }
 
@@ -126,20 +161,20 @@ class ZenixProvider : MainAPI() {
     override val hasMainPage = true
 
     override val mainPage = mainPageOf(
-        "$mainUrl/trending" to "🔥 Tendances",
-        "$mainUrl/top-imdb" to "⭐ Top IMDb",
-        "$mainUrl/movies" to "🎬 Films",
-        "$mainUrl/tv-shows" to "📺 Séries",
-        "$mainUrl/genre/action" to "💥 Action",
-        "$mainUrl/genre/adventure" to "🧭 Aventure",
-        "$mainUrl/genre/animation" to "✨ Animation",
-        "$mainUrl/genre/comedy" to "😂 Comédie",
-        "$mainUrl/genre/science-fiction" to "🚀 Science-Fiction",
-        "$mainUrl/genre/horror" to "👻 Horreur",
-        "$mainUrl/genre/thriller" to "🔪 Thriller",
-        "$mainUrl/genre/romance" to "❤️ Romance",
-        "$mainUrl/genre/crime" to "🕵️ Policier",
-        "$mainUrl/genre/drama" to "🎭 Drame",
+        "/trending" to "🔥 Tendances",
+        "/top-imdb" to "⭐ Top IMDb",
+        "/movies" to "🎬 Films",
+        "/tv-shows" to "📺 Séries",
+        "/genre/action" to "💥 Action",
+        "/genre/adventure" to "🧭 Aventure",
+        "/genre/animation" to "✨ Animation",
+        "/genre/comedy" to "😂 Comédie",
+        "/genre/science-fiction" to "🚀 Science-Fiction",
+        "/genre/horror" to "👻 Horreur",
+        "/genre/thriller" to "🔪 Thriller",
+        "/genre/romance" to "❤️ Romance",
+        "/genre/crime" to "🕵️ Policier",
+        "/genre/drama" to "🎭 Drame",
     )
 
     private val baseHeaders = mapOf("user-agent" to USER_AGENT)
@@ -155,11 +190,85 @@ class ZenixProvider : MainAPI() {
     )
 
     // -------------------------------------------------------------------------
+    // Réglages : adresse du site modifiable (miroirs / changement de domaine)
+    // -------------------------------------------------------------------------
+    companion object {
+        const val DEFAULT_URL = "https://zenix.best" // domaine de secours officiel : zenix.lol
+
+        @Volatile
+        var appContext: android.content.Context? = null
+
+        private const val PREFS_NAME = "zenix_settings"
+        private const val PREF_URL = "site_url"
+
+        /** Adresse actuelle : réglage utilisateur si défini, sinon celle par défaut. */
+        fun currentUrl(): String = runCatching {
+            appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                ?.getString(PREF_URL, null)
+                ?.trim()?.trimEnd('/')
+                ?.takeIf { it.startsWith("http") }
+        }.getOrNull() ?: DEFAULT_URL
+
+        fun setSiteUrl(context: android.content.Context, url: String?) {
+            context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_URL, url?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") })
+                .apply()
+        }
+
+        /** Bouton « Réglages » de l'extension : boîte de dialogue pour changer l'adresse. */
+        fun showSettings(context: android.content.Context) {
+            val input = android.widget.EditText(context).apply {
+                setText(currentUrl())
+                hint = "https://…"
+            }
+            val pad = (context.resources.displayMetrics.density * 20).toInt()
+            val layout = android.widget.LinearLayout(context).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(pad, pad / 2, pad, 0)
+                addView(
+                    android.widget.TextView(context).apply {
+                        text = "Adresse du site Zenix (à changer s'il déménage) :"
+                    }
+                )
+                addView(input)
+            }
+            android.app.AlertDialog.Builder(context)
+                .setTitle("Zenix")
+                .setView(layout)
+                .setPositiveButton("Enregistrer") { _, _ ->
+                    val value = input.text.toString().trim()
+                    if (value.startsWith("http")) {
+                        setSiteUrl(context, value)
+                        toast(context, "Adresse enregistrée : $value")
+                    } else {
+                        toast(context, "Adresse invalide : elle doit commencer par https://")
+                    }
+                }
+                .setNeutralButton("Par défaut") { _, _ ->
+                    setSiteUrl(context, null)
+                    toast(context, "Adresse par défaut restaurée : $DEFAULT_URL")
+                }
+                .setNegativeButton("Annuler", null)
+                .show()
+        }
+
+        private fun toast(context: android.content.Context, message: String) =
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+    }
+
+    /** Applique l'adresse personnalisée à chaque requête. */
+    private fun syncUrl() {
+        mainUrl = currentUrl()
+    }
+
+    // -------------------------------------------------------------------------
     // Page d'accueil
     // -------------------------------------------------------------------------
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        syncUrl()
         if (page > 1) return newHomePageResponse(request.name, emptyList())
-        val doc = app.get(request.data, headers = baseHeaders).document
+        val doc = app.get(mainUrl + request.data, headers = baseHeaders).document
         val cards = doc.select("a.zenix-card__inner")
             .mapNotNull { parseCard(it) }
             .distinctBy { it.url }
@@ -172,6 +281,7 @@ class ZenixProvider : MainAPI() {
     // les derniers ajouts) — on ne l'utilise PAS.
     // -------------------------------------------------------------------------
     override suspend fun search(query: String): List<SearchResponse> {
+        syncUrl()
         val trimmed = query.trim()
         if (trimmed.length < 2) return emptyList()
 
@@ -207,6 +317,7 @@ class ZenixProvider : MainAPI() {
     // Détail : /movie/{slug}, /tv-show/{slug} (une page /episode/ remonte à la série)
     // -------------------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse {
+        syncUrl()
         var fetchUrl = url
         var doc = app.get(fetchUrl, headers = baseHeaders).document
 
@@ -253,7 +364,8 @@ class ZenixProvider : MainAPI() {
         }
 
         return if (isTv) {
-            newTvSeriesLoadResponse(title, fetchUrl, TvType.TvSeries, parseEpisodes(doc)) {
+            val isAnimation = genres.any { it.equals("Animation", ignoreCase = true) }
+            newTvSeriesLoadResponse(title, fetchUrl, TvType.TvSeries, parseEpisodes(doc, title, isAnimation)) {
                 this.posterUrl = poster
                 this.plot = plot
                 this.score = rating?.let { Score.from10(it) }
@@ -271,9 +383,17 @@ class ZenixProvider : MainAPI() {
         }
     }
 
-    /** Épisodes d'une série : liens /episode/{slug}/{saison}-{épisode} (toutes saisons). */
-    private fun parseEpisodes(doc: Document): List<Episode> {
-        return doc.select("a[href*='/episode/']")
+    /**
+     * Épisodes d'une série : liens /episode/{slug}/{saison}-{épisode} (toutes saisons).
+     * Chaque data URL embarque le titre + la place de l'épisode (dans sa saison et
+     * en absolu) + le drapeau anime — utilisés par le secours AnimoFlix de loadLinks.
+     */
+    private fun parseEpisodes(doc: Document, showTitle: String, isAnimation: Boolean): List<Episode> {
+        data class RawEp(
+            val href: String, val season: Int?, val number: Int?,
+            val name: String, val poster: String?
+        )
+        val raw = doc.select("a[href*='/episode/']")
             .mapNotNull { a ->
                 val href = a.attr("href")
                 val m = episodeRegex.find(href) ?: return@mapNotNull null
@@ -283,15 +403,31 @@ class ZenixProvider : MainAPI() {
                     it.isNotBlank() && !Regex("""\.(mp4|mkv|avi)$""", RegexOption.IGNORE_CASE).containsMatchIn(it)
                 } ?: "Épisode ${epNumber ?: ""}".trim()
                 val poster = a.selectFirst("img")?.attr("src")?.takeIf { it.startsWith("http") }
-                newEpisode(fixUrl(href)) {
-                    this.name = name
-                    this.season = m.groupValues[1].toIntOrNull()
-                    this.episode = epNumber
-                    this.posterUrl = poster
-                }
+                RawEp(fixUrl(href), m.groupValues[1].toIntOrNull(), epNumber, name, poster)
             }
-            .distinctBy { it.data }
-            .sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 }))
+            .distinctBy { it.href }
+            .filter { it.season != null && it.number != null }
+            .sortedWith(compareBy({ it.season ?: 0 }, { it.number ?: 0 }))
+
+        // Place dans la saison + index absolu (position cumulée sur toute la série)
+        var absBase = 0
+        val perSeason = raw.groupBy { it.season!! }
+        val animeAllowed = isAnimation || raw.size >= 60
+        return raw.map { r ->
+            val seasonEps = perSeason[r.season!!]!!
+            val first = seasonEps.first().number!!
+            val sIndex = r.number!! - first + 1
+            val absIndex = absBase + sIndex
+            if (seasonEps.lastOrNull() === r) absBase += seasonEps.size
+            val packed = "?t=" + java.net.URLEncoder.encode(showTitle, "UTF-8") +
+                "&i=$sIndex&a=$absIndex&af=${if (animeAllowed) 1 else 0}"
+            newEpisode(r.href + packed) {
+                this.name = r.name
+                this.season = r.season
+                this.episode = r.number
+                this.posterUrl = r.poster
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -303,11 +439,17 @@ class ZenixProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        syncUrl()
         val raw = app.get(data, headers = baseHeaders).text
         val isTv = "/tv-show/" in data || "/episode/" in data
         val epMatch = episodeRegex.find(data)
         val season = epMatch?.groupValues?.get(1)?.toIntOrNull()
         val episode = epMatch?.groupValues?.get(2)?.toIntOrNull()
+        val params = parseParams(data.substringAfter('?', ""))
+        val showTitle = params["t"]
+        val seasonIndex = params["i"]?.toIntOrNull()
+        val absIndex = params["a"]?.toIntOrNull()
+        val animeAllowed = params["af"] == "1"
         // L'ID TMDB de la fiche se trouve dans l'URL du lecteur interne Zenix
         val tmdb = Regex("""[?&]tmdb=(\d+)""").find(raw)?.groupValues?.get(1)
 
@@ -342,13 +484,21 @@ class ZenixProvider : MainAPI() {
 
             // ---- Agrégateurs (en parallèle) ----
             if (tmdb != null) {
-                val aggregators = listOf(
-                    async(Dispatchers.IO) { runCatching { apiwiflixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) },
-                    async(Dispatchers.IO) { runCatching { playerixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) },
-                    async(Dispatchers.IO) { runCatching { movixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) },
-                    async(Dispatchers.IO) { runCatching { movixFstreamLinks(tmdb, season, episode) }.getOrDefault(emptyList()) },
-                    async(Dispatchers.IO) { runCatching { primesrcLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
-                )
+                val aggregators = mutableListOf<kotlinx.coroutines.Deferred<List<HostLink>>>()
+                aggregators += async(Dispatchers.IO) { runCatching { apiwiflixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
+                // playerix : en TV seuls les boutons HLS (data-fmt="m3u8") sont fiables —
+                // les boutons iframe renvoient les mêmes liens pour tous les épisodes (vérifié).
+                aggregators += async(Dispatchers.IO) { runCatching { playerixLinks(tmdb, season, episode, m3u8Only = isTv) }.getOrDefault(emptyList()) }
+                aggregators += async(Dispatchers.IO) { runCatching { movixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
+                aggregators += async(Dispatchers.IO) { runCatching { movixFstreamLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
+                aggregators += async(Dispatchers.IO) { runCatching { primesrcLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
+
+                // ---- AnimoFlix : épisodes d'animes (One Piece & co), derniers épisodes inclus ----
+                if (isTv && animeAllowed && showTitle != null && seasonIndex != null && absIndex != null) {
+                    aggregators += async(Dispatchers.IO) {
+                        runCatching { animoflixLinks(showTitle, season ?: 1, seasonIndex, absIndex) }.getOrDefault(emptyList())
+                    }
+                }
                 aggregators.awaitAll().forEach { addHostLinks(it) }
             }
         }
@@ -374,8 +524,8 @@ class ZenixProvider : MainAPI() {
                 else -> 3
             }
             val originP = when (hl.origin) {
-                "apiwiflix" -> 0; "movix" -> 1; "fstream" -> 2; "playerix" -> 3
-                "primesrc" -> 4; "zenix" -> 5; else -> 6
+                "apiwiflix" -> 0; "animoflix" -> 1; "movix" -> 2; "fstream" -> 3
+                "playerix" -> 4; "primesrc" -> 5; "zenix" -> 6; "animoflix-r" -> 7; else -> 8
             }
             return langP * 10 + originP
         }
@@ -421,7 +571,7 @@ class ZenixProvider : MainAPI() {
                                 }
                             }
                             // Secours générique si l'extracteur n'a rien donné
-                            if (produced == 0 && "zenix.best" !in hl.url) {
+                            if (produced == 0 && currentUrl().removePrefix("https://").removePrefix("http://").substringBefore('/') !in hl.url) {
                                 runCatching {
                                     genericExtract(
                                         hl.url, hl.label, hl.lang,
@@ -440,6 +590,118 @@ class ZenixProvider : MainAPI() {
 
         return found
     }
+
+    /** Paramètres de l'URL de données (?t=…&i=…&a=…&af=…). */
+    private fun parseParams(query: String): Map<String, String> {
+        if (query.isBlank()) return emptyMap()
+        return Regex("""(?:^|&)([a-z]+)=([^&]*)""")
+            .findAll(query)
+            .associate {
+                it.groupValues[1] to runCatching {
+                    java.net.URLDecoder.decode(it.groupValues[2], "UTF-8")
+                }.getOrDefault(it.groupValues[2])
+            }
+    }
+
+    // -------------------------------------------------------------------------
+    // Secours anime — épisodes d'animoflix.to (One Piece, Naruto, démons & co).
+    // animoflix a les DERNIERS épisodes VOSTFR là où les agrégateurs culbutent,
+    // avec un hébergeur maison (ansembed, HLS) + sibnet.
+    // -------------------------------------------------------------------------
+    private val animoflixCf by lazy { CloudflareKiller() }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class AfSuggestion(
+        @JsonProperty("title") val title: String? = null,
+        @JsonProperty("slug") val slug: String? = null
+    )
+
+    /** Titre normalisé (minuscules, sans accents ni ponctuation) pour comparer. */
+    private fun normalizeTitle(s: String): String =
+        java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9]"), "")
+
+    /** Trouve l'anime sur animoflix.to par son titre (autocomplétion du site). */
+    private suspend fun animoflixSlug(title: String): String? {
+        val json = runCatching {
+            app.get(
+                "https://animoflix.to/search-autocomplete.php",
+                params = mapOf("q" to title),
+                interceptor = animoflixCf
+            ).text
+        }.getOrNull() ?: return null
+        val suggestions = AppUtils.tryParseJson<Array<AfSuggestion>>(json) ?: return null
+        val wanted = normalizeTitle(title)
+        return suggestions.firstOrNull { normalizeTitle(it.title ?: "") == wanted }?.slug
+            ?: suggestions.firstOrNull {
+                it.title != null && suggestions.size == 1 &&
+                    (wanted.contains(normalizeTitle(it.title!!)) || normalizeTitle(it.title!!).contains(wanted))
+            }?.slug
+    }
+
+    /**
+     * Épisode d'un anime sur animoflix.to. Le site numérote PAR SAISON (saison-N),
+     * essentiellement le même découpage que TMDB — on essaie aussi les variantes
+     * « sans saison / numéro absolu » et « saison 1 / numéro absolu » utilisées
+     * par d'autres animes. Chaque page est VÉRIFIÉE (le titre doit contenir
+     * « Épisode {n} ») car une page inexistante redirige en douce vers l'épisode 1.
+     */
+    private suspend fun animoflixLinks(
+        title: String,
+        season: Int,
+        seasonIndex: Int,
+        absIndex: Int
+    ): List<HostLink> {
+        val slug = animoflixSlug(title) ?: return emptyList()
+        val out = mutableListOf<HostLink>()
+
+        val variants = mutableListOf<Pair<String, String>>()
+        if (!outHasLang(out, "VOSTFR")) variants += "saison-$season/vostfr/episode-$seasonIndex" to "VOSTFR"
+        variants += listOf(
+            "vostfr/episode-$absIndex" to "VOSTFR",
+            "saison-1/vostfr/episode-$absIndex" to "VOSTFR",
+            "saison-$season/vf/episode-$seasonIndex" to "VF",
+            "vf/episode-$absIndex" to "VF",
+            "saison-1/vf/episode-$absIndex" to "VF"
+        )
+
+        for ((path, lang) in variants) {
+            if (outHasLang(out, lang)) continue
+            val url = "https://animoflix.to/anime/$slug/$path"
+            val html = runCatching {
+                app.get(url, interceptor = animoflixCf).text
+            }.getOrNull() ?: continue
+
+            // Vérification : la page doit bien être celle de l'épisode demandé
+            val requested = Regex("""episode-(\d+)$""").find(path)?.groupValues?.get(1) ?: continue
+            val pageTitle = Regex("""<title>([^<]*)</title>""").find(html)?.groupValues?.get(1) ?: continue
+            if (!Regex("""\b[pé]+isode\s*$requested(\D|$)""", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(java.text.Normalizer.normalize(pageTitle, java.text.Normalizer.Form.NFD))
+            ) continue
+
+            val select = Regex(
+                """<select[^>]*id="epLecteurSelect"[^>]*>(.*?)</select>""",
+                RegexOption.DOT_MATCHES_ALL
+            ).find(html)
+            val options = select?.let {
+                Regex("""<option([^>]*)>([^<]*)</option>""").findAll(it.groupValues[1]).toList()
+            } ?: emptyList()
+            for (opt in options) {
+                val value = Regex("""value="([^"]+)"""").find(opt.groupValues[1])?.groupValues?.get(1) ?: continue
+                if (!value.startsWith("http")) continue
+                val restricted = """data-restricted="true"""" in opt.groupValues[1]
+                val label = opt.groupValues[2].trim().ifBlank { "Lecteur" }
+                out += HostLink(
+                    value, lang, "AnimoFlix $label",
+                    if (restricted) "animoflix-r" else "animoflix"
+                )
+            }
+        }
+        return out
+    }
+
+    private fun outHasLang(list: List<HostLink>, lang: String) = list.any { it.lang == lang }
 
     /** Ré-étiquette un lien avec sa langue (« Filemoon · VF ») pour l'utilisateur. */
     private fun relabel(link: ExtractorLink, lang: String?): ExtractorLink {
@@ -479,7 +741,12 @@ class ZenixProvider : MainAPI() {
 
     /** apis.wavewatch.top/playerix.php — boutons data-url avec langue (VF/VOSTFR/MULTI),
      *  liens hébergeurs encodés en base64 (u=…) et parfois des m3u8 directs. */
-    private suspend fun playerixLinks(tmdb: String, season: Int?, episode: Int?): List<HostLink> {
+    private suspend fun playerixLinks(
+        tmdb: String,
+        season: Int?,
+        episode: Int?,
+        m3u8Only: Boolean = false
+    ): List<HostLink> {
         val url = if (season != null && episode != null) {
             // NB : « saison= » est ignoré par l'API — les paramètres anglais fonctionnent
             "https://apis.wavewatch.top/playerix.php?type=tv&id=$tmdb&season=$season&episode=$episode"
@@ -496,6 +763,7 @@ class ZenixProvider : MainAPI() {
                 val dataUrl = Regex("""data-url="([^"]+)"""").find(attrs)?.groupValues?.get(1) ?: return@forEach
                 val fmt = Regex("""data-fmt="([^"]*)"""").find(attrs)?.groupValues?.get(1) ?: "iframe"
                 if (Regex("""data-alive="0"""").containsMatchIn(attrs)) return@forEach
+                if (m3u8Only && fmt != "m3u8") return@forEach
                 val lang = Regex("""class="lang"[^>]*>\s*([^<]+)""").find(content)?.groupValues?.get(1)
                     ?.trim()?.split(" ")?.lastOrNull() // « 🇫🇷 VF » -> VF
                     ?.takeIf { it.isNotBlank() && it != "?" }

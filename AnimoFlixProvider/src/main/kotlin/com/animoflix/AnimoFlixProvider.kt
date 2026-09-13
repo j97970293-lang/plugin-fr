@@ -23,7 +23,7 @@ import com.lagradost.cloudstream3.newAnimeSearchResponse
 import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.network.CloudflareKiller
-import com.lagradost.cloudstream3.plugins.BasePlugin
+import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.utils.AppUtils
 import com.lagradost.cloudstream3.utils.ExtractorApi
@@ -44,14 +44,17 @@ import org.jsoup.nodes.Element
  * Entry point of the plugin, this is the class that CloudStream loads.
  */
 @CloudstreamPlugin
-class AnimoFlixPlugin : BasePlugin() {
-    override fun load() {
+class AnimoFlixPlugin : Plugin() {
+    override fun load(context: android.content.Context) {
+        AnimoFlixProvider.appContext = context.applicationContext
         registerMainAPI(AnimoFlixProvider())
         // Custom extractors used by AnimoFlix:
         // - ansembed.net (VidMoly/JWPlayer clone)
         // - odysee.com (LBRY)
         registerExtractorAPI(AnsEmbed())
         registerExtractorAPI(Odysee())
+        // Bouton « Réglages » sur la fiche de l'extension dans CloudStream
+        openSettings = { ctx -> AnimoFlixProvider.showSettings(ctx) }
     }
 }
 
@@ -151,7 +154,7 @@ data class CatalogueAjaxResponse(
 
 class AnimoFlixProvider : MainAPI() {
 
-    override var mainUrl = "https://animoflix.to"
+    override var mainUrl = DEFAULT_URL
     override var name = "AnimoFlix"
     override val hasMainPage = true
     override var lang = "fr"
@@ -159,6 +162,79 @@ class AnimoFlixProvider : MainAPI() {
 
     // The site sits behind Cloudflare: this interceptor solves the challenge via WebView (on device).
     private val cfKiller by lazy { CloudflareKiller() }
+
+    // -------------------------------------------------------------------------
+    // Réglages : adresse du site modifiable (miroirs / changement de domaine)
+    // -------------------------------------------------------------------------
+    companion object {
+        const val DEFAULT_URL = "https://animoflix.to"
+
+        @Volatile
+        var appContext: android.content.Context? = null
+
+        private const val PREFS_NAME = "animoflix_settings"
+        private const val PREF_URL = "site_url"
+
+        /** Adresse actuelle : réglage utilisateur si défini, sinon celle par défaut. */
+        fun currentUrl(): String = runCatching {
+            appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                ?.getString(PREF_URL, null)
+                ?.trim()?.trimEnd('/')
+                ?.takeIf { it.startsWith("http") }
+        }.getOrNull() ?: DEFAULT_URL
+
+        fun setSiteUrl(context: android.content.Context, url: String?) {
+            context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_URL, url?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") })
+                .apply()
+        }
+
+        /** Bouton « Réglages » de l'extension : boîte de dialogue pour changer l'adresse. */
+        fun showSettings(context: android.content.Context) {
+            val input = android.widget.EditText(context).apply {
+                setText(currentUrl())
+                hint = "https://…"
+            }
+            val pad = (context.resources.displayMetrics.density * 20).toInt()
+            val layout = android.widget.LinearLayout(context).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(pad, pad / 2, pad, 0)
+                addView(
+                    android.widget.TextView(context).apply {
+                        text = "Adresse du site AnimoFlix (à changer s'il déménage) :"
+                    }
+                )
+                addView(input)
+            }
+            android.app.AlertDialog.Builder(context)
+                .setTitle("AnimoFlix")
+                .setView(layout)
+                .setPositiveButton("Enregistrer") { _, _ ->
+                    val value = input.text.toString().trim()
+                    if (value.startsWith("http")) {
+                        setSiteUrl(context, value)
+                        toast(context, "Adresse enregistrée : $value")
+                    } else {
+                        toast(context, "Adresse invalide : elle doit commencer par https://")
+                    }
+                }
+                .setNeutralButton("Par défaut") { _, _ ->
+                    setSiteUrl(context, null)
+                    toast(context, "Adresse par défaut restaurée : $DEFAULT_URL")
+                }
+                .setNegativeButton("Annuler", null)
+                .show()
+        }
+
+        private fun toast(context: android.content.Context, message: String) =
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+    }
+
+    /** Applique l'adresse personnalisée à chaque requête. */
+    private fun syncUrl() {
+        mainUrl = currentUrl()
+    }
 
     // ---------- URL helpers ----------
 
@@ -236,6 +312,7 @@ class AnimoFlixProvider : MainAPI() {
         }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        syncUrl()
         when (request.data) {
             "catalogue" -> {
                 val doc = app.get(
@@ -272,6 +349,7 @@ class AnimoFlixProvider : MainAPI() {
     // ---------- Search ----------
 
     override suspend fun search(query: String): List<SearchResponse> {
+        syncUrl()
         // 1) Server-side catalogue search: /catalogue/?search=…&ajax=1 returns {cards: "<html>"}
         val cards = runCatching {
             val json = app.get(
@@ -310,6 +388,7 @@ class AnimoFlixProvider : MainAPI() {
     // ---------- Detail page ----------
 
     override suspend fun load(url: String): LoadResponse {
+        syncUrl()
         val doc = app.get(url, interceptor = cfKiller).document
         val slug = slugOf(url) ?: url.trimEnd('/').substringAfterLast('/')
 
@@ -359,12 +438,12 @@ class AnimoFlixProvider : MainAPI() {
 
         val seasonEpisodes = coroutineScope {
             seasonLinks.map { seasonUrl ->
-                async(Dispatchers.IO) { parseSeasonEpisodes(seasonUrl, slug, poster) }
+                async(Dispatchers.IO) { parseSeasonEpisodes(seasonUrl, slug) }
             }.awaitAll()
         }.flatten()
 
         // Fallback: episodes listed directly on the anime page (no season sub-page)
-        val episodes = seasonEpisodes.ifEmpty { parseSeasonEpisodes(url, slug, poster) }
+        val episodes = seasonEpisodes.ifEmpty { parseSeasonEpisodes(url, slug) }
 
         val episodesByDub = episodes
             .groupBy({ it.first }, { it.second })
@@ -388,12 +467,12 @@ class AnimoFlixProvider : MainAPI() {
      * Parses one season page (or the anime page itself as fallback) and returns
      * (DubStatus, Episode) pairs. "vostfr" episodes go to Subbed, "vf" to Dubbed.
      * Special seasons (film, heroines, kai…) are stored as season 0.
-     * Each episode gets the anime poster ("fiche") as thumbnail.
+     * No per-episode thumbnail: CloudStream shows the episode number, so each
+     * episode stays identifiable (the fiche poster is on the show page).
      */
     private suspend fun parseSeasonEpisodes(
         seasonUrl: String,
-        slug: String,
-        poster: String?
+        slug: String
     ): List<Pair<DubStatus, Episode>> {
         val doc = runCatching { app.get(seasonUrl, interceptor = cfKiller).document }.getOrNull()
             ?: return emptyList()
@@ -421,7 +500,6 @@ class AnimoFlixProvider : MainAPI() {
                 this.name = name
                 this.season = seasonNum
                 this.episode = number
-                this.posterUrl = poster
             }
         }.distinctBy { it.second.data }
     }
@@ -440,6 +518,7 @@ class AnimoFlixProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        syncUrl()
         val doc = app.get(data, interceptor = cfKiller).document
         val html = doc.html()
 
