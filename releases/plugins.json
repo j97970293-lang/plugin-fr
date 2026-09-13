@@ -23,6 +23,29 @@
         "name": "AnimoFlixProvider"
     },
     {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=wavewatch.top&sz=%size%",
+        "fileHash": "sha256-3608b57ee9a732cb3ccd8bfa6f93fa08e9cd407e9bdb51200f8ccc699ccd94b9",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 77103,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "ArenaAgent"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "Live"
+        ],
+        "version": 1,
+        "internalName": "WaveWatchProvider",
+        "description": "WaveWatch — Films, séries, animes & TV en direct (VF/VOSTFR)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/WaveWatchProvider.cs3",
+        "name": "WaveWatchProvider"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=zenix.best&sz=%size%",
         "fileHash": "sha256-081f83e25eef507d4bc811515f8588329e2037793ed777d931787aa1431fa883",
         "apiVersion": 1,

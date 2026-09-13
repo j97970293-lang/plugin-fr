@@ -1,11 +1,12 @@
 # Plugin fr · Dépôt d'extensions CloudStream (`.cs3`)
 
-Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **deux extensions** :
+Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **trois extensions** :
 
 | Extension | Site | Contenu |
 |---|---|---|
 | **AnimoFlixProvider** | [animoflix.to](https://animoflix.to/) | animes, films & OAV en VF / VOSTFR |
 | **ZenixProvider** | [zenix.best](https://zenix.best/) (secours : zenix.lol) | films & séries en VF / VOSTFR |
+| **WaveWatchProvider** | [wavewatch.top](https://wavewatch.top/) | films, séries, animes & **TV en direct** en VF / VOSTFR |
 
 ---
 
@@ -111,6 +112,45 @@ Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement :
 - Certains hébergeurs tournent leurs domaines (rebeccapracticeloss.com → johnbeyondnation.com…) : ces liens tombent parfois en 404 — ils sont ignorés silencieusement, les autres sources compensent.
 - Les lecteurs internes Zenix (BlinkFlux / « Lecteur Gratuit 4K ») sont protégés par pubs/captcha : jamais utilisés.
 - Si le site change d'adresse, modifiez `mainUrl` en haut de `ZenixProvider.kt` (`https://zenix.lol`).
+
+---
+
+# WaveWatch · Extension CloudStream (`.cs3`)
+
+Extension pour **[wavewatch.top](https://wavewatch.top/)** — plateforme de streaming FR (catalogue TMDB) : films, séries, animes et **chaînes TV en direct**.
+
+## ✨ Fonctionnalités
+
+- **Catalogue 100 % API JSON publique** (FastAPI + TMDB en français) : tendances films/séries/animes, prochaines sorties, 6 genres de films et 3 de séries — fiches complètes (titre, affiche HD, fond, note, année, synopsis, genres, durée) et **toutes les saisons/épisodes** (titre, résumé, miniature, note, durée ; les saisons spéciales sont exclues)
+- **Recherche multi** : `/api/tmdb/search?q=` renvoie films ET séries avec le bon type
+- **📺 Chaînes TV en direct** : les 78 chaînes actives du site (généralistes, sport, kids, cinéma, docs, musique…) dans une section dédiée — le flux HLS de chaque chaîne est extrait directement
+- **Lecture — le lecteur maison du site + 7 agrégats en parallèle** (l'ID TMDB sert de clé) :
+  - **Liste officielle du site** : la page `wwembed.wavewatch.top/api/v1/streaming/ww-{movie|tv}-…` contient `var _src=[…]` — **37 lecteurs avec leur langue** (VF/VOSTFR/MULTI/VO). Les ~25 lecteurs externes (VidFast, VidSrc×4, Frembed, 2Embed, MultiEmbed, Smashy, CineFuse, CineSrc, AnyEmbed, Bcine, MoviePire, Movix.fun, Vidora, CinemaOS, VidKing, Braflix, Mostream, 111movies, MoviesApi, HNEmbed, Peachify, Embed-API…) sont tous essayés
+  - **zeus** (`zeus.php?sse`) — flux Server-Sent Events : ~35 sources avec **vraies langues VF/VFQ/VOSTFR/MULTI** et HLS direct 1080p
+  - **apiwiflix** — 6–15 liens hébergeurs avec langue
+  - **playerix** — jusqu'à 118 boutons « Serveur » : liens dédupliqués par hôte+langue + **playlists HLS directes** (paramètres anglais `season=`/`episode=` — le site passe `saison=`, ignoré par l'API, qui servait l'épisode 1×1 en boucle !)
+  - **movix** — ~12 liens FR (Uqload, LuluStream, Voe, DSVPlay…)
+  - **french-stream** — vraies étiquettes **VFQ / VF / VOSTFR** (films)
+  - **mouve** (`mouve.php?json=1`) — 39–75 flux par contenu, HLS directs inclus
+  - **1embed.cc** — playlists HLS directes (extracteur maison)
+- **Ordre intelligent** : **VF/VFQ d'abord**, puis VOSTFR, puis MULTI, puis langues inconnues — 6 extractions en parallèle
+- **Langue affichée sur chaque lien** : « Filemoon · VF », « Vidzy · VOSTFR », « WaveWatch · Necro · MULTI »…
+- **Filtre anti-erreurs** : images, pubs, YouTube, sous-titres exclus du fallback générique
+
+## 📥 Installation
+
+Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement :
+
+- **`.cs3` v1** : release [**wavewatch-v1 (Pre-release)**](https://github.com/j97970293-lang/plugin-fr/releases/tag/wavewatch-v1) → **Paramètres → Extensions → Installer un fichier**
+- Miroirs x0.at : `repo.json` → https://x0.at/usfG.json · `plugins.json` → https://x0.at/Zgvv.json · `WaveWatchProvider.cs3` → https://x0.at/rt6A.cs3
+
+## ⚠️ Notes techniques
+
+- Le site est une SPA React : **toutes les données viennent de l'API JSON publique** (`/api/tmdb/…`), rien à scraper côté HTML.
+- Les pages `wwembed` (lecture) contiennent la liste des sources en clair (`var _src=[…]`) — l'« anti-bot » du site (Étape 1 → Étape 2) n'est qu'une pub affichée dans le navigateur, sans effet sur l'API.
+- Certaines URL de la liste du site sont boguées côté serveur (`apiwiflix.php?id=108978/1`, `&=1`, `tmdb=108978season=1`…) : l'extension **reconstruit** toutes les URL des agrégateurs internes avec les bons paramètres.
+- Mouve étiquette tous ses flux « VO » (placeholder) : ces liens sont traités comme langue inconnue.
+- Zeus/mouve/playerix peuvent renvoyer 404 en rafale : chaque agrégateur est isolé (`runCatching`), les autres compensent.
 
 ---
 
