@@ -3,7 +3,7 @@
         "iconUrl": "https://www.google.com/s2/favicons?domain=animoflix.to&sz=%size%",
         "fileHash": "sha256-cb066d9a27ed1f828640ebd4ed902babfef0117cd297d5bae092afc0025580c6",
         "apiVersion": 1,
-        "repositoryUrl": "https://github.com/user/animoflix-cloudstream",
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
         "fileSize": 42354,
         "status": 1,
         "language": "fr",
@@ -18,16 +18,16 @@
         ],
         "version": 2,
         "internalName": "AnimoFlixProvider",
-        "description": "AnimoFlix \u2014 Animes, films & OAV en VF/VOSTFR",
-        "url": "https://raw.githubusercontent.com/user/animoflix-cloudstream/builds/AnimoFlixProvider.cs3",
+        "description": "AnimoFlix — Animes, films & OAV en VF/VOSTFR",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimoFlixProvider.cs3",
         "name": "AnimoFlixProvider"
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=zenix.best&sz=%size%",
-        "fileHash": "sha256-6f45af958c05ad5ce331f2da5abfe0d125aa8409398651b71f2b8e0fe10ffcb2",
+        "fileHash": "sha256-081f83e25eef507d4bc811515f8588329e2037793ed777d931787aa1431fa883",
         "apiVersion": 1,
-        "repositoryUrl": "https://github.com/user/animoflix-cloudstream",
-        "fileSize": 36184,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 58974,
         "status": 1,
         "language": "fr",
         "authors": [
@@ -37,10 +37,10 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "ZenixProvider",
-        "description": "Zenix \u2014 Films et s\u00e9ries en VF/VOSTFR",
-        "url": "https://raw.githubusercontent.com/user/animoflix-cloudstream/builds/ZenixProvider.cs3",
+        "description": "Zenix — Films et séries en VF/VOSTFR",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/ZenixProvider.cs3",
         "name": "ZenixProvider"
     }
 ]

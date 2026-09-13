@@ -15,13 +15,21 @@ Extension pour **[animoflix.to](https://animoflix.to/)** — animes, films & OAV
 
 ## ✨ Fonctionnalités
 
-- **Page d'accueil** : Derniers épisodes VOSTFR, derniers épisodes VF, derniers ajouts, catalogue paginé (93 pages)
-- **Recherche** : recherche serveur (`?search=`) + fallback autocomplete (reconnaît aussi les titres alternatifs)
-- **Fiches animes** : titre, poster, synopsis, genres, statut (en cours / terminé), titre alternatif
-- **Épisodes** : toutes les saisons parcourues automatiquement, VF et VOSTFR séparées (onglets « VOSTFR » / « VF » dans l'app), saisons spéciales (films, OAV, arcs) regroupées en saison 0
-- **Lecteurs** : tous les lecteurs de la page épisode sont listés (SibNet, SendVid, AnsEmbed, Odysee…) — extracteurs maison pour `ansembed.net` (clone VidMoly/JWPlayer) et `odysee.com` (API LBRY), extracteurs intégrés CloudStream pour les autres, et fallback générique (og:video, `<source>`, `file:` mp4/m3u8) si un extracteur ne renvoie rien
-- **Miniatures** : chaque épisode affiche l'affiche de la fiche de l'anime
-- **Cloudflare** : le site est protégé par Cloudflare — l'extension utilise `CloudflareKiller` (résolution du challenge via WebView au premier lancement)
+- **Page d'accueil** : 14 sections réelles du site (Tendances, Top IMDb, Films, Séries + 10 genres : action, aventure, animation, comédie, SF, horreur, thriller, romance, policier, drame) — la pagination des listes est chargée en JS sur le site, chaque section affiche sa première page
+- **Recherche** : API JSON du site (`/ajax/search/suggest`) avec titre, affiche, année — gère accents, apostrophes et majuscules (la route HTML `/search/{requête}` ne filtre pas côté serveur : elle renvoie toujours les derniers ajouts, elle n'est donc plus utilisée)
+- **Fiches** : titre, affiche, note, année, synopsis, genres — extraits des badges de la fiche (les badges « vues » et IMDb sont ignorés)
+- **Séries** : toutes les saisons et épisodes parsés depuis les liens `/episode/{slug}/{saison}-{épisode}`, avec titre et miniature d'épisode (celle de la fiche si absente) ; ouvrir un lien épisode remonte automatiquement à la série
+- **Lecture — v2 : 6 agrégats de sources en parallèle** (l'ID TMDB de la fiche sert de clé commune) :
+  - **1embed.cc** — playlists HLS directes jouables immédiatement (extracteur maison : Solari, Necro…), émises en premier
+  - **apiwiflix** (apis.wavewatch.top) — 6–15 liens hébergeurs **avec langue** (VF/VOSTFR), films & séries
+  - **playerix** (apis.wavewatch.top) — jusqu'à 118 boutons « Serveur » par contenu : liens hébergeurs dédupliqués par hôte+langue **et parfois des playlists HLS directes** (jouées sans extraction) ; chaque bouton indique sa langue (🇫🇷 VF / 🇫🇷 VOSTFR / 🌐 MULTI)
+  - **movix** (api.movix.cash) — ~12 liens FR par film/épisode (Uqload, LuluStream, Voe, Wish, DSVPlay…)
+  - **french-stream** (api.movix.cash `/fstream`) — liens avec **vraies étiquettes VFQ / VF / VOSTFR** (films)
+  - **PrimeSrc** — jusqu'à 14 serveurs (Filemoon, Dood…) — protégé Cloudflare : best effort
+  - plus les **~24 boutons « Serveurs de lecture » de la page Zenix** (Frembed, WaveWatch, VidFast, VidLove, Mostream…), en dernier recours
+- **Ordre intelligent** : les liens sont essayés **en parallèle** (6 à la fois) et triés — **VF d'abord**, puis VOSTFR, puis langues inconnues ; au sein de chaque langue, les agrégateurs les plus fiables d'abord
+- **Langue affichée sur chaque lien** : « Filemoon · VF », « Vidzy · VOSTFR »… les langues viennent des agrégateurs et des libellés des boutons (`… | VF`)
+- **Filtre anti-erreurs 3003** : images, pubs, YouTube, `.vtt`/`.srt`, miniatures et trailers sont exclus des résultats du fallback générique (og:video, `<source>`, `file:`, .m3u8/.mp4/.webm)
 
 ## 📥 Installation
 
@@ -81,7 +89,12 @@ Extension pour **[zenix.best](https://zenix.best/)** (domaine de secours officie
 
 ## 📥 Installation
 
-Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement : [`releases/ZenixProvider.cs3`](releases/ZenixProvider.cs3) → **Paramètres → Extensions → Installer un fichier**.
+Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement :
+
+- **`.cs3` v2** : release [**zenix-v2 (Pre-release)**](https://github.com/j97970293-lang/plugin-fr/releases/tag/zenix-v2) → **Paramètres → Extensions → Installer un fichier**
+- Miroirs x0.at : `repo.json` → https://x0.at/M5wA.json · `plugins.json` → https://x0.at/k3u9.json · `ZenixProvider.cs3` v2 → https://x0.at/uVYD.cs3
+
+**v2** : correction de l'erreur 3003 « Source error » (filtre anti-faux-positifs), bien plus de sources (1embed HLS + apiwiflix + playerix + movix + french-stream + PrimeSrc + les 24 boutons du site, avec **HLS directs** playerix), recherche corrigée (API suggest uniquement — la route HTML ne filtrait pas) et **langue VF/VOSTFR affichée sur chaque lien**.
 
 ## 🔨 Compiler soi-même
 
@@ -92,8 +105,11 @@ Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement : [`releases/
 ## ⚠️ Notes techniques
 
 - Le site est un rendu serveur PHP **sans Cloudflare** — pas de WebView nécessaire.
-- Les serveurs sont lus depuis les boutons `selectStream(n, 'url', 'Libellé | LANGUE', 'type')` présents dans le HTML brut (les « Autres sources » sont dépliables dans l'UI web mais déjà dans la page).
-- Les lecteurs externes sont des embeds JS pour la plupart : CloudStream n'a pas d'extracteur intégré pour eux ; l'extension compte sur **1embed** (fiable, HLS direct), les extracteurs intégrés (certains peuvent s'ajouter dans les futures versions de l'app) et le fallback générique.
+- L'ID TMDB est extrait de l'URL du lecteur interne Zenix présente dans le HTML de la fiche (`[?&]tmdb=(\d+)`) ; il est requis pour les agrégateurs. Sans TMDB, seuls les boutons de la page sont utilisés.
+- Paramètres playerix : l'API ignore `saison=` (français) — l'extension utilise `season=`/`episode=` (anglais), faute de quoi l'épisode 1×1 était servi pour toutes les demandes.
+- Movix : les liens des séries sont imbriqués dans `current_episode.player_links` (films : `player_links` à la racine) ; `api.movix.llc` est mort, seul `api.movix.cash` répond.
+- Certains hébergeurs tournent leurs domaines (rebeccapracticeloss.com → johnbeyondnation.com…) : ces liens tombent parfois en 404 — ils sont ignorés silencieusement, les autres sources compensent.
+- Les lecteurs internes Zenix (BlinkFlux / « Lecteur Gratuit 4K ») sont protégés par pubs/captcha : jamais utilisés.
 - Si le site change d'adresse, modifiez `mainUrl` en haut de `ZenixProvider.kt` (`https://zenix.lol`).
 
 ---
