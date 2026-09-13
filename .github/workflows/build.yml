@@ -68,7 +68,7 @@ jobs:
         run: |
           cat > $GITHUB_WORKSPACE/builds/repo.json << EOF
           {
-            "name": "AnimoFlix CloudStream",
+            "name": "Plugin fr",
             "description": "Extension AnimoFlix pour CloudStream — animes, films & OAV en VF/VOSTFR",
             "manifestVersion": 1,
             "pluginLists": [
