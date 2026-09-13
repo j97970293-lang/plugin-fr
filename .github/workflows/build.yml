@@ -69,7 +69,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/builds/repo.json << EOF
           {
             "name": "Plugin fr",
-            "description": "Extension AnimoFlix pour CloudStream — animes, films & OAV en VF/VOSTFR",
+            "description": "Extensions CloudStream FR — AnimoFlix (animes) & Zenix (films et séries) VF/VOSTFR",
             "manifestVersion": 1,
             "pluginLists": [
               "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/builds/plugins.json"

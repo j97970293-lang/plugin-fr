@@ -1,6 +1,17 @@
+# Plugin fr · Dépôt d'extensions CloudStream (`.cs3`)
+
+Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **deux extensions** :
+
+| Extension | Site | Contenu |
+|---|---|---|
+| **AnimoFlixProvider** | [animoflix.to](https://animoflix.to/) | animes, films & OAV en VF / VOSTFR |
+| **ZenixProvider** | [zenix.best](https://zenix.best/) (secours : zenix.lol) | films & séries en VF / VOSTFR |
+
+---
+
 # AnimoFlix · Extension CloudStream (`.cs3`)
 
-Extension [CloudStream](https://github.com/recloudstream/cloudstream) pour **[animoflix.to](https://animoflix.to/)** — animes, films & OAV en **VF / VOSTFR**.
+Extension pour **[animoflix.to](https://animoflix.to/)** — animes, films & OAV en **VF / VOSTFR**.
 
 ## ✨ Fonctionnalités
 
@@ -51,6 +62,42 @@ Téléchargez [`releases/AnimoFlixProvider.cs3`](releases/AnimoFlixProvider.cs3)
 
 > **Note** : cette extension est compilée contre l'API `pre-release` de CloudStream. Utilisez une version récente de l'app ([releases pre-release](https://github.com/recloudstream/cloudstream/releases)).
 
+---
+
+# Zenix · Extension CloudStream (`.cs3`)
+
+Extension pour **[zenix.best](https://zenix.best/)** (domaine de secours officiel : `zenix.lol`) — films & séries en **VF / VOSTFR**.
+
+## ✨ Fonctionnalités
+
+- **Page d'accueil** : 14 sections réelles du site (Tendances, Top IMDb, Films, Séries + 10 genres : action, aventure, animation, comédie, SF, horreur, thriller, romance, policier, drame) — la pagination des listes est chargée en JS sur le site, chaque section affiche sa première page
+- **Recherche** : API JSON du site (`/ajax/search/suggest`) avec titre, affiche, année — fallback HTML `/search/{requête}`
+- **Fiches** : titre, affiche, note, année, synopsis, genres — extraits des badges de la fiche (les badges « vues » et IMDb sont ignorés)
+- **Séries** : toutes les saisons et épisodes parsés depuis les liens `/episode/{slug}/{saison}-{épisode}`, avec titre et miniature d'épisode ; ouvrir un lien épisode remonte automatiquement à la série
+- **Lecture — TOUS les serveurs listés** : chaque page film/épisode contient les ~24 serveurs du site (« Serveurs de lecture » + « Autres sources ») : Frembed, Peachify, VidFast, Mostream, HNEmbed, Catflix, WaveWatch, Videasy, PrimeSrc, VidLove, VidUp, Braflix, StreamIMDb, VidSrc PM/IO, AnyEmbed, Viduki, **1Embed**, VidKing, 2Embed, SuperFlix… Ils sont essayés **en parallèle** (6 à la fois), les **VF d'abord**, puis VOSTFR, puis le reste ; les lecteurs internes Zenix (BlinkFlux / « Lecteur Gratuit 4K », protégés par pubs/captcha) en dernier
+- **Extracteur maison `1embed.cc`** : les pages de ce lecteur contiennent la liste de ses serveurs (Solari, Necro…) avec des playlists HLS directement jouables — testé et validé sur films **et** épisodes
+- **Dernier recours** : l'ID TMDB de la fiche est utilisé pour reconstruire une URL 1embed si aucune source n'a répondu
+- **Fallback générique** : pour tout lecteur sans extracteur, la page de l'embed est analysée (og:video, `<source>`, `file:`, .m3u8/.mp4/.webm)
+
+## 📥 Installation
+
+Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement : [`releases/ZenixProvider.cs3`](releases/ZenixProvider.cs3) → **Paramètres → Extensions → Installer un fichier**.
+
+## 🔨 Compiler soi-même
+
+```bash
+./gradlew ZenixProvider:make    # → ZenixProvider/build/ZenixProvider.cs3
+```
+
+## ⚠️ Notes techniques
+
+- Le site est un rendu serveur PHP **sans Cloudflare** — pas de WebView nécessaire.
+- Les serveurs sont lus depuis les boutons `selectStream(n, 'url', 'Libellé | LANGUE', 'type')` présents dans le HTML brut (les « Autres sources » sont dépliables dans l'UI web mais déjà dans la page).
+- Les lecteurs externes sont des embeds JS pour la plupart : CloudStream n'a pas d'extracteur intégré pour eux ; l'extension compte sur **1embed** (fiable, HLS direct), les extracteurs intégrés (certains peuvent s'ajouter dans les futures versions de l'app) et le fallback générique.
+- Si le site change d'adresse, modifiez `mainUrl` en haut de `ZenixProvider.kt` (`https://zenix.lol`).
+
+---
+
 ## 🔨 Compiler soi-même
 
 ```bash
@@ -73,15 +120,21 @@ animoflix-cloudstream/
 ├── build.gradle.kts              # config racine (plugin Gradle CloudStream, AGP 8.7.3, Kotlin 2.3.0)
 ├── settings.gradle.kts           # inclusion automatique des modules
 ├── repo.json                     # descripteur du dépôt (la version à jour est générée sur la branche builds)
-├── releases/                     # dernier .cs3 compilé
+├── releases/                     # derniers .cs3 compilés
 ├── .github/workflows/build.yml   # build automatique → branche builds
-└── AnimoFlixProvider/
-    ├── build.gradle.kts          # métadonnées du plugin (version, tvTypes, langue, icône…)
+├── AnimoFlixProvider/
+│   ├── build.gradle.kts          # métadonnées du plugin (version, tvTypes, langue, icône…)
+│   └── src/main/
+│       ├── AndroidManifest.xml
+│       └── kotlin/com/animoflix/
+│           ├── AnimoFlixProvider.kt   # provider (accueil, recherche, fiche, épisodes, liens vidéo)
+│           └── (plugin + extracteur AnsEmbed dans le même fichier)
+└── ZenixProvider/
+    ├── build.gradle.kts          # métadonnées du plugin Zenix
     └── src/main/
         ├── AndroidManifest.xml
-        └── kotlin/com/animoflix/
-            ├── AnimoFlixProvider.kt   # provider (accueil, recherche, fiche, épisodes, liens vidéo)
-            └── (plugin + extracteur AnsEmbed dans le même fichier)
+        └── kotlin/com/zenix/
+            └── ZenixProvider.kt        # provider + plugin + extracteur 1embed
 ```
 
 ## ⚠️ Notes techniques

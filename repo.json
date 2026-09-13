@@ -1,6 +1,6 @@
 {
     "name": "Plugin fr",
-    "description": "Extension AnimoFlix pour CloudStream — animes, films & OAV en VF/VOSTFR",
+    "description": "Extensions CloudStream FR — AnimoFlix (animes VF/VOSTFR) & Zenix (films et séries VF/VOSTFR)",
     "manifestVersion": 1,
     "pluginLists": [
         "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/plugins.json"

@@ -21,5 +21,26 @@
         "description": "AnimoFlix \u2014 Animes, films & OAV en VF/VOSTFR",
         "url": "https://raw.githubusercontent.com/user/animoflix-cloudstream/builds/AnimoFlixProvider.cs3",
         "name": "AnimoFlixProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=zenix.best&sz=%size%",
+        "fileHash": "sha256-6f45af958c05ad5ce331f2da5abfe0d125aa8409398651b71f2b8e0fe10ffcb2",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/user/animoflix-cloudstream",
+        "fileSize": 36184,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "ArenaAgent"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "ZenixProvider",
+        "description": "Zenix \u2014 Films et s\u00e9ries en VF/VOSTFR",
+        "url": "https://raw.githubusercontent.com/user/animoflix-cloudstream/builds/ZenixProvider.cs3",
+        "name": "ZenixProvider"
     }
 ]
