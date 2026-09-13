@@ -1,5 +1,26 @@
 [
     {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=afd926.mom&sz=%size%",
+        "fileHash": "sha256-3892d5fcf02d01d411a7f6ebfab66a45962a214e7b69493b96f017937916edf4",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 67629,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "ArenaAgent"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "AfterdarkProvider",
+        "description": "Afterdark — Films et séries en VOSTFR (multi-serveurs)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AfterdarkProvider.cs3",
+        "name": "AfterdarkProvider"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=animoflix.to&sz=%size%",
         "fileHash": "sha256-cb066d9a27ed1f828640ebd4ed902babfef0117cd297d5bae092afc0025580c6",
         "apiVersion": 1,

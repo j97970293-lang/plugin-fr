@@ -1,12 +1,13 @@
 # Plugin fr · Dépôt d'extensions CloudStream (`.cs3`)
 
-Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **trois extensions** :
+Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **quatre extensions** :
 
 | Extension | Site | Contenu |
 |---|---|---|
 | **AnimoFlixProvider** | [animoflix.to](https://animoflix.to/) | animes, films & OAV en VF / VOSTFR |
 | **ZenixProvider** | [zenix.best](https://zenix.best/) (secours : zenix.lol) | films & séries en VF / VOSTFR |
 | **WaveWatchProvider** | [wavewatch.top](https://wavewatch.top/) | films, séries, animes & **TV en direct** en VF / VOSTFR |
+| **AfterdarkProvider** | [afd926.mom](https://afd926.mom/) (miroir de afterdark.best) | films & séries en **VOSTFR** (multi-serveurs) |
 
 ---
 
@@ -203,3 +204,29 @@ animoflix-cloudstream/
 ## 📜 Licence / Avertissement
 
 Projet à but éducatif. CloudStream et cette extension ne hébergent aucun contenu : elles indexent uniquement un site public. Utilisez-la conformément aux lois applicables dans votre pays.
+
+---
+
+# Afterdark · Extension CloudStream (`.cs3`)
+
+Extension pour **[afd926.mom](https://afd926.mom/)** (miroir actif de `afterdark.best`) — films et séries en **VOSTFR**.
+
+- **Catalogue** : les données TMDB du site, servies en français (tendances films & séries, prochaines sorties, découvertes par genre, recherche multi).
+- **Lecture — un maximum de serveurs en parallèle** :
+  - les **lecteurs de secours du site lui-même** (Videasy, Frembed, Peachify — URL exactes tirées de son code) ;
+  - les agrégateurs **apiwiflix, playerix, zeus, mouve, movix, french-stream et 1embed** (playlists HLS directes) ;
+  - les lecteurs publics **VidFast, VidSrc.cc, VidSrc.wtf, 2Embed, 111Movies, Braflix, VidKing**.
+- **Ordre des liens : VOSTFR d'abord**, puis VO, puis VF/VFQ, puis MULTI — logique d'un site VOSTFR. La langue est affichée sur chaque lien : « Vidara · VOSTFR », « Kakaflix · VFQ »…
+- ~50–60 liens par film, ~45–55 par épisode (hébergeurs extractibles + playlists HLS directes).
+- ℹ️ L'API vidéo interne du site est protégée par **Cloudflare Turnstile** (vérifié par reverse-engineering des bundles : un « proof » signé est exigé pour `/api/sources`). L'extension livre donc le contenu via des sources publiques éprouvées, indexées sur le même ID TMDB — résultat équivalent, sans captcha.
+- Certains lecteurs publics (VidSrc.cc, Peachify) bloquent les serveurs/datacenters : ils peuvent fonctionner depuis votre appareil mais pas depuis un cloud.
+
+## 📥 Installation
+
+| Extension | Fichier | Miroir x0.at |
+|---|---|---|
+| Afterdark | [AfterdarkProvider.cs3](releases/AfterdarkProvider.cs3) | [AfterdarkProvider.cs3](https://x0.at/JArM.cs3) |
+
+| Dépôt (repo.json) | Liste d'extensions (plugins.json) |
+|---|---|
+| https://x0.at/zk3V.json | https://x0.at/RGc5.json |

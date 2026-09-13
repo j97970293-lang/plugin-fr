@@ -1,6 +1,6 @@
 {
     "name": "Plugin fr",
-    "description": "Extensions CloudStream FR — AnimoFlix, Zenix & WaveWatch (films, séries, animes, TV live) VF/VOSTFR",
+    "description": "Extensions CloudStream FR — AnimoFlix, Zenix, WaveWatch & Afterdark (films, séries, animes, TV live) VF/VOSTFR",
     "manifestVersion": 1,
     "pluginLists": [
         "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/plugins.json"
