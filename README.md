@@ -79,12 +79,13 @@ Les correctifs v2 étaient bons côté URLs, mais les 5 extensions routaient leu
 | **WaveWatch v5** | idem : MoviesApi + VidNest + fallback movix.men (movix & french-stream) |
 | **Zenix v6** | idem : MoviesApi + VidNest + fallback movix.men (movix & french-stream) |
 
-### 📥 Installation & miroirs
+### 📥 Installation & miroirs (v3 — 11 extensions)
 
-- **Dépôt CloudStream** (recommandé — 10 extensions) : `https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/repo.json`
-- **Miroir x0.at** : `https://x0.at/YwJi.json`
-- **Release la plus récente** : [fix-v1-2026-09-14 (Pre-release)](https://github.com/j97970293-lang/plugin-fr/releases/tag/fix-v1-2026-09-14) — les 10 `.cs3` en pièces jointes
-- **Fichiers individuels (miroirs x0.at, dernières versions)** : CineStream `https://x0.at/Oybz.cs3` · FrenchStream v2 `https://x0.at/ljPN.cs3` · Flemmix v2 `https://x0.at/ItKX.cs3` · Vostfree `https://x0.at/oBeg.cs3` · Anime-Sama `https://x0.at/erhU.cs3` · Afterdark v5 `https://x0.at/m0B9.cs3` · WaveWatch v5 `https://x0.at/Gigc.cs3` · Zenix v6 `https://x0.at/bgCH.cs3` · plugins.json `https://x0.at/2h6o.json`
+- **Dépôt CloudStream** (recommandé) : `https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/repo.json`
+- **Release la plus récente** : [v3-2026-09-14 (Pre-release)](https://github.com/j97970293-lang/plugin-fr/releases/tag/v3-2026-09-14) — les 11 `.cs3` en pièces jointes
+- **Miroirs x0.at (v3)** : repo `https://x0.at/FMlE.json` · plugins.json (11) `https://x0.at/vqlM.json`
+- **Fichiers individuels (miroirs x0.at, v3)** : AnimeSite v1 `https://x0.at/2DMF.cs3` · FrenchStream v3 `https://x0.at/C9hO.cs3` · Flemmix v3 `https://x0.at/ZacO.cs3` · Franime v2 `https://x0.at/DdUk.cs3` · CineStream v2 `https://x0.at/FqDL.cs3` · Vostfree v2 `https://x0.at/rXtQ.cs3`
+- **Inchangés (v5/v6/v1, miroirs fix-v1)** : Afterdark v5 `https://x0.at/m0B9.cs3` · WaveWatch v5 `https://x0.at/Gigc.cs3` · Zenix v6 `https://x0.at/bgCH.cs3` · Anime-Sama v1 `https://x0.at/erhU.cs3` · AnimoFlix v5 (release)
 
 > ℹ️ **Pourquoi ces sites ?** Les 9 adresses proposées ont toutes été examinées : `purstream.ad` (lecteur verrouillé par veske.io), `dulourd.hair` (Turnstile obligatoire), `animesite.fr` (SPA « sans API »… jusqu'à la ré-analyse v3 qui a trouvé l'API cachée → intégré en v3), `1jour1film` (recherche bloquée, lecteurs déjà couverts par les agrégateurs existants) et `movix.online` (identique à movix.men déjà intégré) ont été écartées — tout le reste est intégré.
 
