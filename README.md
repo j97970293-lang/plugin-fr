@@ -34,6 +34,13 @@ Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream)
 | **WaveWatch v5** | idem : MoviesApi + VidNest + fallback movix.men (movix & french-stream) |
 | **Zenix v6** | idem : MoviesApi + VidNest + fallback movix.men (movix & french-stream) |
 
+### 📥 Installation & miroirs
+
+- **Dépôt CloudStream** (recommandé — 9 extensions) : `https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/repo.json`
+- **Miroir x0.at** : `https://x0.at/MwNM.json`
+- **Release** : [serveurs-v1-2026-09-14 (Pre-release)](https://github.com/j97970293-lang/plugin-fr/releases/tag/serveurs-v1-2026-09-14) — les 9 `.cs3` en pièces jointes
+- **Fichiers individuels (miroirs x0.at)** : FrenchStream `https://x0.at/yS8v.cs3` · Flemmix `https://x0.at/uui9.cs3` · Vostfree `https://x0.at/oBeg.cs3` · Anime-Sama `https://x0.at/erhU.cs3` · Afterdark v5 `https://x0.at/m0B9.cs3` · WaveWatch v5 `https://x0.at/Gigc.cs3` · Zenix v6 `https://x0.at/bgCH.cs3` · plugins.json `https://x0.at/YRmz.json`
+
 > ℹ️ **Pourquoi ces sites ?** Les 9 adresses proposées ont toutes été examinées : `purstream.ad` (lecteur verrouillé par veske.io), `dulourd.hair` (Turnstile obligatoire), `animesite.fr` (SPA sans API accessible), `1jour1film` (recherche bloquée, lecteurs déjà couverts par les agrégateurs existants) et `movix.online` (identique à movix.men déjà intégré) ont été écartées — tout le reste est intégré.
 
 ## 🆕 Nouveauté du 14 septembre — FRAnime v1 (animes VF/VOSTFR)
