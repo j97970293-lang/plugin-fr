@@ -1,8 +1,9 @@
 # TUTO — Créer des extensions CloudStream & analyser des sites de streaming
 
 > **Document écrit pour être lu par une IA** (ou un humain). Il synthétise l'expérience
-> réelle de création de 4 extensions CloudStream francophiones (AnimoFlix, Zenix,
-> WaveWatch, Afterdark) et de l'analyse reverse-engineering de leurs sites.
+> réelle de création de 9 extensions CloudStream francophones (AnimoFlix, Zenix,
+> WaveWatch, Afterdark, FRAnime, FrenchStream, Flemmix, Vostfree, AnimeSama) et
+> de l'analyse reverse-engineering de leurs sites.
 > Chaque règle ci-dessous a été **vérifiée par des requêtes réelles** — pas de théorie.
 > Structure : règles explicites, URL exactes, pièges constatés, code minimal.
 > Si vous êtes une IA chargée de créer/maintenir une extension : lisez tout, appliquez
@@ -159,6 +160,116 @@ multiembed.mov, smashy, anyembed. **Re-tester avant chaque publication** — ça
    Les formats CHANGENT (1embed a changé en sept. 2026) → écrire les extracteurs
    pour supporter ancien ET nouveau format.
 
+### 3.4 TRIAGE D'UNE LISTE DE SITES (cas réel : 9 URLs fournies d'un coup)
+
+Quand l'utilisateur donne une liste de sites, NE PAS tout intégrer : évaluer chaque
+site en ~5 requêtes et classer. Méthode éprouvée (14 sept. 2026, 9 URLs) :
+
+| Test | Décision si échec |
+|---|---|
+| 1. Accueil : statut, Cloudflare/Turnstile, SSR ou SPA ? | Turnstile obligatoire → ÉCARTER (dulourd.hair) |
+| 2. Recherche : GET puis POST `do=search` (DLE) — résultats contiennent-ils le terme ? | POST redirigé vers l'accueil + GET « Bot shield active. » (18 octets) = recherche MOLLE côté serveur → extension sans recherche (flemmix) |
+| 3. Un film connu : où sont les lecteurs ? (iframe, div inline, API JSON, script JS) | Lecteur verrouillé par anti-bot dédié (veske.io sur purstream.ad) → ÉCARTER |
+| 4. SPA ? Chercher UNE API de données dans les chunks (12 chunks max, sinon abandon) | Next.js App Router : RSC flight = loading boundaries VIDES, aucun endpoint (animesite.fr) → ÉCARTER |
+| 5. Le site n'apporte-t-il QUE des lecteurs déjà couverts ? | 1jour1film = agrégateurs TMDB (vidsrc, moviesapi, vidfast…) déjà dans nos extensions → ÉCARTER (redondant) |
+
+Autres leçons de triage :
+- **fstream.info** (et compagnie) : ce sont des PAGES D'ANNONCE qui redirigent vers
+  le domaine éphémère courant (fs27.lol). Suivre la redirection et intégrer LE
+  domaine courant — et toujours prévoir le bouton Réglages pour changer l'adresse
+  (ces domaines meurent en quelques semaines).
+- **movix.online ≈ movix.men** : même backend (api.movix.*). Avant d'intégrer un
+  « nouveau » site, comparer son contenu/API aux agrégateurs déjà branchés.
+- Domaines éphémères ⇒ TOUJOURS l'URL en réglage (`syncUrl()` à chaque requête).
+
+### 3.5 SITES DLE (DataLife Engine) — french-stream (fs27.lol) & vostfree.ws
+
+Le CMS DLE se reconnaît à `index.php?do=search`, `/page/N/`, `uploads/posts/`.
+Deux sites DLE, deux stratégies :
+
+**french-stream (fs27.lol)** — tout est en JSON/JS, presque pas de HTML à parser :
+- Cartes : `<a class="short-poster…" href="…index.php?newsid={id}" alt="{titre}">`.
+- FILM : `GET /engine/ajax/film_api.php?id={newsId}` → `{players:{nom:{vostfr,
+  vff, vfq, default:url}}, meta:{affiche, trailer}}` (une API par fiche !).
+- SÉRIE : `GET /static/series/{newsId}.js` → `{vf:{"1":{vidzy,uqload,…}}, vostfr:…}`
+  (clé = numéro d'épisode ; vfq = VFQ ; vo = VO→Subbed « VO »).
+- Saisons : `/engine/ajax/get_seasons.php?serie_tag={tagz}&news_id={id}` avec
+  `tagz = f-{tmdb}` / `s-{tmdb}` (fiches alignées TMDB).
+- Recherche : `?do=search` classique, cartes identiques au catalogue.
+
+**vostfree.ws** — 1 article = 1 anime COMPLET, lecteurs en divs cachés :
+- `content_player_{pid}` : contenu brut (id sibnet, uqload, ou URL http directe) ;
+- `player_{pid} class="new_player_{type}"` : type d'hébergeur (sibnet, uqload,
+  mytv, dood, voe, opvid, vidmoly, fembed, cloudvideo, uptostream…) ;
+- `buttons_{ep}` : bloc PAR ÉPISODE qui référence les player_{pid}.
+- ⚠ le parse naïf `(.*?)</div>` CASSE (divs imbriqués) → re.split sur
+  `<div id="buttons_\d+" class="button_box">` ou regex avec lookahead
+  `(?=<div id="buttons_\d+"|$)`.
+- Mapping type→URL : sibnet `video.sibnet.ru/shell.php?videoid={id}`, uqload
+  `uqload.io/embed-{id}.html`, mytv/myvi → `myvi.top/embed/{id}`, fembed…
+- ⚠ La page de RÉSULTATS DE RECHERCHE DLE n'a PAS la même structure que le
+  catalogue : `<span class="image"><img src alt></span><div class="info"><div
+  class="title"><a href>` — ne pas oublier le `</span>` fermant dans la regex
+  (erreur réelle : 0 résultat à cause de lui).
+
+### 3.6 LECTEURS INLINE & SAISONS EN JS — flemmix.cloud & anime-sama.to
+
+**flemmix.cloud** (DLE déguisé) :
+- Films : lecteurs INLINE `loadVideo('https://…')` + `<span>` libellé — jusqu'à
+  16 par film (Vidara, Voe, LuLuTV, Uqload…). Regex :
+  `loadVideo\('([^']+)'(?:,\s*this)?\)[^>]*>\s*<span[^>]*>([^<]*)</span>`.
+- Séries : 1 article par saison, divs `ep{N}vs` (VOSTFR) et `ep{N}vf` (VF).
+- Recherche neutralisée (cf. §3.4) → catalogue paginé seulement (30/page).
+
+**anime-sama.to** :
+- Recherche : `POST /template-php/defaut/fetch.php` (form `query={q}`) →
+  `<a class="asn-search-result" href="/catalogue/{slug}">` + `<h3>` + img
+  `cdn.jsdelivr.net/gh/Anime-Sama/IMG@img/contenu/thumb/{slug}.webp`.
+- Saisons : appels JS dans la fiche → `panneauAnime("Saison 1", "saison1/vostfr")`
+  (chemin RELATIF à `/catalogue/{slug}/`, page saison AVEC slash final).
+  Attention aux sagas : « Saga 1 (East Blue) » ne matche pas `saison|season\d+`
+  → seasonNumber null, on garde le NOM complet dans le titre d'épisode.
+- Épisodes : `<script src='episodes.js?filever=N'>` en SIMPLE quotes RELATIF →
+  URL = `{url_saison}/episodes.js` → variables `eps1 = ["…", "…"]` (miroirs),
+  `eps1_nb = N` ; les films ont leurs propres tableaux.
+- Slug avec POINTS (`2.43-seiin-…`) → regex `[a-z0-9.-]+` PAS `[a-z0-9-]+`
+  (erreur réelle : 46 cartes sur 47).
+- Lecteurs : AnsEmbed (JWPlayer `sources:`) — réutiliser JwPlayerHelper.
+
+### 3.7 API DE LECTEURS DÉCODÉES (reverse d'embeds publics)
+
+**Vidara (famille « StreamUp », 17 domaines)** — API RÉELLE (sept. 2026) :
+- L'ancienne `vidara.to/api/source/{id}` est MORTE (404). La vraie :
+  `POST {domaine}/api/stream` body JSON `{"filecode":"{id}","device":"web"}`
+  → `{streaming_url: "https://…/master.m3u8?token=…", title, subtitles[], default_sub_lang}`.
+- `vidaraa.cc/e/{id}` n'est qu'un miroir HTML qui redirige (var MIRROR) — l'API
+  répond sur le domaine du lien lui-même : prendre `Regex("^(https?://[^/]+)")`
+  du lien reçu, PAS un domaine en dur.
+- Domaines : vidara.to, vidaraa.cc, vidaraw.com, vidarax.cc, vidara.so,
+  vidavaca.net, vidaarax.net/com, vidaratem.com, odysseusa.cc, handfacesnap.cc,
+  namefacesnap.cc, thebesthosterv.com, vidmatrixa.com, vidchampions.com,
+  antarcticadocs.com, nameitweb.com (liste à compléter en greppant les bundles).
+
+**MoviesApi (moviesapi.to ≡ vidspark.to)** — SPA React/vidstack, MAIS l'API
+interne est dans le bundle (`grep "api/vidora"` sur index-*.js) :
+- `GET /api/vidora/v1/movie/{tmdb}` et `/api/vidora/v1/tv/{tmdb}/{s}/{e}`
+  avec header `x-player-key: 3a67e8866ae1d2bb9e81fe7f73315a56eb3bdf5e3e755c7554c8be6910aa6b13`
+  → `{result, sources:[{url, tracks:[{file,label}]}], title, view_type, view_id}`.
+- Couverture PARTIELLE (beaucoup de « No Vidora link found » / 404 « Movie not
+  found ») et 502 fréquents → intégrer en best-effort silencieux : échec =
+  `emptyList()`, jamais de lien mort affiché.
+- Le pattern général : une SPA « sans API » a presque toujours SON API dans le
+  bundle principal — grepper `"/api/`, `fetch(`, `x-*-key` AVANT de déclarer
+  « impossible ».
+
+**Movix** : `api.movix.cash` (historique) et `api.movix.men` (2026) partagent le
+même backend → fallback en cascade : essayer .cash, si exception/404 réessayer
+l'URL avec `.replace("api.movix.cash", "api.movix.men")`.
+
+**VidNest** : extracteur INTÉGRÉ à CloudStream (`VidNest.class` dans le jar) →
+`loadExtractor` le gère nativement, il suffit d'émettre l'URL embed
+`vidnest.fun/{movie|tv}/{tmdb}[/s/e]`.
+
 ---
 
 ## 4. LA STACK « AGRÉGATEURS TMDB » (sources multi-serveurs)
@@ -231,12 +342,30 @@ et les conventions divergent partout.
 | GitHub: `body is not an object` (422) | release API refuse | Écrire le JSON payload dans un fichier, `curl -d @file` |
 | Permissions gradlew perdues | `Permission denied` | `chmod +x gradlew` après restauration de workspace |
 | API CloudStream | champs/settings inconnus | `javap -classpath jar com.lagradost.cloudstream3.…` (vérifier AVANT de coder) |
+| `JsUnpacker.unpackAndCombStr` inexistant | compilation KO « Unresolved reference » | API réelle : `JsUnpacker(page).takeIf { it.detect() }?.unpack()` (vérifié par javap sur le jar) |
+| Label de lambda incorrect | « Unresolved label » (`return@findAll`) | Dans `x.findAll(h).forEach { }` le label est `@forEach` — vérifier le nom du récepteur |
+| Import ExtractorApi au mauvais endroit | « Unresolved reference 'ExtractorApi' » | `com.lagradost.cloudstream3.utils.ExtractorApi` (pas à la racine cloudstream3) |
+| Regex slug trop stricte | cartes manquantes silencieusement (46/47) | Slugs avec points `2.43-…` → `[a-z0-9.-]+` ; toujours comparer nb de liens trouvés vs nb de liens dans la page |
+| Page de recherche ≠ page catalogue | 0 résultat alors que la recherche répond 200 | Les résultats DLE ont leur propre template → parser SPÉCIFIQUE pour la recherche (cf. §3.5) |
+| Recherche « qui marche » mais renvoie l'accueil | résultats identiques pour tout terme | Vérifier que le TERME apparaît dans les titres renvoyés, sinon ignorer la réponse (flemmix) |
+| Fallback domaine d'API mort | 404 systématique sur un agrégateur | Double domaine en cascade (.cash → .men) ; `runCatching` + `getOrNull() ?: return emptyList()` |
+| Vidara « /api/source » obsolète | extractor 404 | API actuelle : POST /api/stream {filecode, device} (cf. §3.7) |
+| Anti-bot « veske.io » (purstream.ad) | player verrouillé côté serveur | Écarter — aucune parade sans navigateur |
+| Turnstile sur TOUTE la navigation (dulourd.hair) | même l'accueil exige le challenge | Écarter (CloudflareKiller ne gère pas Turnstile) |
+| Next.js RSC flight vide (animesite.fr) | loading boundaries `[]`, aucun endpoint | Scanner ≤12 chunks ; si aucune API de données → Écarter |
 
 ---
 
 ## 6. PUBLICATION (pipeline complet)
 
 1. `./gradlew make makePluginsJson` → `.cs3` par provider + `plugins.json`.
+   ⚠ En sandbox RAM 2 Go : builder UN MODULE À LA FOIS et JAMAIS `makePluginsJson`
+   (OOM). Commande validée (~30 s/module) :
+   `JAVA_HOME=… ANDROID_HOME=… GRADLE_USER_HOME=… ./gradlew :{Module}:make --no-daemon
+   --max-workers=1 -Dorg.gradle.jvmargs=-Xmx1024m -Dkotlin.daemon.jvm.args=-Xmx640m`
+   ⚠ Ne PAS pousser manuellement la branche `builds/` si un workflow existe : la CI
+   force-push (`--amend`) et `cancel-in-progress` annule les runs concurrents →
+   simplement pousser main, attendre `conclusion: success` via l'API, vérifier.
 2. Copier les `.cs3` dans `releases/` ; `plugins.json` avec
    `"url": "https://raw.githubusercontent.com/{user}/{repo}/builds/{Name}.cs3"`.
 3. `repo.json` : `{name, description, manifestVersion:1, pluginLists:[url plugins.json]}`.
@@ -255,6 +384,10 @@ et les conventions divergent partout.
 ## 7. CHECKLIST FINALE (avant de dire « c'est fini »)
 
 - [ ] Compile sans erreur (`make`), versions incrémentées.
+- [ ] Bouton « Réglages » présent si le site a des domaines éphémères (fs27.lol,
+      flemmix…, tous en fait) : changement d'URL effectif SANS réinstallation.
+- [ ] Regex validées sur le HTML RÉEL sauvegardé (/tmp/recon) : nombre de cartes
+      trouvées == nombre de liens présents dans la page (pas 46/47).
 - [ ] `plugins.json` : 4 champs (name, version, url raw builds/, repositoryUrl).
 - [ ] Recherche : 2-3 titres renvoient les bons contenus.
 - [ ] Fiche film + fiche série + liste épisodes (saisons complètes).
@@ -267,8 +400,14 @@ et les conventions divergent partout.
 
 ---
 
-*Basé sur l'expérience réelle de : AnimoFlix v1→v3 (scraping animoflix.to, CF,
-extracteurs AnsEmbed/Odysee), Zenix v1→v3 (scraping PHP SSR + boutons serveurs),
-WaveWatch v1→v2 (API TMDB maison + wwembed + TV live + agrégateurs), Afterdark
-v1→v2 (RE de bundles React/TanStack, gate Turnstile analysée et contournée par
-sources publiques équivalentes).*
+*Basé sur l'expérience réelle de : AnimoFlix v1→v5 (scraping animoflix.to, CF,
+extracteurs AnsEmbed/Odysee, docteur de liens), Zenix v1→v6 (scraping PHP SSR +
+boutons serveurs + agrégateurs), WaveWatch v1→v5 (API TMDB maison + wwembed + TV
+live + agrégateurs), Afterdark v1→v5 (RE de bundles React/TanStack, gate Turnstile
+analysée et contournée par sources publiques équivalentes), FRAnime v1 (API Kitsu,
+challenge CF + jeton watch2 chiffré), FrenchStream v1 (DLE film_api/static-series,
+Vidara /api/stream, XOR vidzy/fsvid), Flemmix v1 (lecteurs inline loadVideo,
+recherche neutralisée par bot shield), Vostfree v1 (blocs buttons_/player_,
+346 épisodes One Piece), AnimeSama v1 (panneauAnime, episodes.js, miroirs),
+et le triage des 9 sites du 14 sept. 2026 (4 intégrés, 3 enrichis, 5 écartés
+pour cause de Turnstile/veske.io/SPA/bot shield/redondance).*
