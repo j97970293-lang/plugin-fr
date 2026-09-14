@@ -92,7 +92,7 @@ APIs clés (vérifiées par javap sur cloudstream.jar) :
   `SharedPreferences`, la relire à CHAQUE requête (`syncUrl()` en tête de
   getMainPage/search/load/loadLinks) pour que le changement prenne effet sans recharger.
 
-### 2.3 Pattern « plein de serveurs » (prouvé sur 4 extensions)
+### 2.3 Pattern « plein de serveurs » (prouvé sur 9 extensions)
 
 ```
 loadLinks(data) :
