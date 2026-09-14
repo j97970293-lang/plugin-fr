@@ -10,6 +10,14 @@ Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream)
 | **AfterdarkProvider** | [afd926.mom](https://afd926.mom/) (miroir de afterdark.best) | films & séries en **VOSTFR** (multi-serveurs) |
 
 
+## 🛠️ Correctif du 14 septembre (soir) — erreur 3003 « Source error » (AnimoFlix v4, Zenix v4, WaveWatch v3, Afterdark v3)
+
+| Extension | Nouveautés |
+|---|---|
+| **Toutes** | **Erreurs 3003 `PARSING_CONTAINER_UNSUPPORTED` éliminées** : chaque lien est maintenant **vérifié jouable avant d'être affiché** (mini-requête au flux : HLS/MP4/WebM/TS/DASH reconnus) — les liens morts, pages HTML et fichiers mal typés sont masqués au lieu de faire planter le lecteur ; en cas de doute réseau le lien est conservé |
+| **Toutes** | **Serveur « Vidara » réparé** : l'extracteur intégré CloudStream marquait tous ses liens en HLS sans vérifier (MP4/lien mort → 3003) et plantait sur les sous-titres ; chaque extension embarque désormais son extracteur Vidara qui respecte le vrai type de fichier |
+| **Toutes** | Doublons de liens fusionnés (même URL finale via plusieurs lecteurs = une seule entrée) |
+
 ## 🔄 Mises à jour du 14 septembre 2026
 
 | Extension | Nouveautés |
@@ -61,6 +69,8 @@ https://x0.at/gMeP.json
 > ⚠️ Hébergement temporaire (expiration sous quelques semaines/mois). Pour un lien pérenne, poussez le dépôt sur GitHub — le workflow publiera tout automatiquement sur la branche `builds`.
 > ℹ️ Si vous aviez ajouté l'ancienne URL de test (v1, `x0.at/RluP.json`) : supprimez d'abord ce dépôt et l'extension dans CloudStream, puis ajoutez la nouvelle ci-dessus.
 
+**v4** : correctif erreurs 3003 — docteur de liens (chaque lien vérifié jouable avant affichage) + extracteur Vidara réparé + doublons fusionnés.
+
 **v3** : bouton « Réglages » pour changer l'adresse du site ; miniatures des épisodes comme avant (numéro visible).
 
 **v2** : tous les serveurs/lecteurs de la page épisode sont maintenant listés (y compris SendVid, AnsEmbed et Odysee via un extracteur dédié + un fallback générique mp4/m3u8), et les épisodes affichent la miniature de la fiche de l'anime.
@@ -109,6 +119,8 @@ Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement :
 - **`.cs3` v2** : release [**zenix-v2 (Pre-release)**](https://github.com/j97970293-lang/plugin-fr/releases/tag/zenix-v2) → **Paramètres → Extensions → Installer un fichier**
 - Miroirs x0.at : `repo.json` → https://x0.at/M5wA.json · `plugins.json` → https://x0.at/k3u9.json · `ZenixProvider.cs3` v2 → https://x0.at/uVYD.cs3
 
+**v4** : correctif erreurs 3003 — docteur de liens (chaque lien vérifié jouable avant affichage) + extracteur Vidara réparé + doublons fusionnés.
+
 **v3** : bouton « Réglages » pour changer l'adresse du site ; secours anime AnimoFlix (One Piece & co, derniers épisodes inclus) ; en TV seuls les liens playerix fiables (HLS) sont gardés — les iframes renvoyaient le même épisode pour tous.
 
 **v2** : correction de l'erreur 3003 « Source error » (filtre anti-faux-positifs), bien plus de sources (1embed HLS + apiwiflix + playerix + movix + french-stream + PrimeSrc + les 24 boutons du site, avec **HLS directs** playerix), recherche corrigée (API suggest uniquement — la route HTML ne filtrait pas) et **langue VF/VOSTFR affichée sur chaque lien**.
@@ -132,6 +144,8 @@ Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement :
 ---
 
 # WaveWatch · Extension CloudStream (`.cs3`)
+
+> **v3** : correctif erreurs 3003 — docteur de liens (chaque lien vérifié jouable avant affichage) + extracteur Vidara réparé + doublons fusionnés.
 
 > **v2** : bouton « Réglages » pour changer l'adresse du site ; secours anime AnimoFlix (One Piece & co, derniers épisodes inclus) ; en TV seuls les liens playerix/mouve fiables sont gardés (les autres renvoyaient le même épisode pour tous).
 
@@ -226,6 +240,8 @@ Projet à but éducatif. CloudStream et cette extension ne hébergent aucun cont
 
 # Afterdark · Extension CloudStream (`.cs3`)
 
+> **v3** : correctif erreurs 3003 — docteur de liens (chaque lien vérifié jouable avant affichage) + extracteur Vidara réparé + doublons fusionnés.
+
 > **v2** : bouton « Réglages » pour changer l'adresse du site ; secours anime AnimoFlix (One Piece & co, derniers épisodes inclus) ; en TV seuls les liens playerix/mouve fiables sont gardés (les autres renvoyaient le même épisode pour tous).
 
 Extension pour **[afd926.mom](https://afd926.mom/)** (miroir actif de `afterdark.best`) — films et séries en **VOSTFR**.
@@ -244,13 +260,13 @@ Extension pour **[afd926.mom](https://afd926.mom/)** (miroir actif de `afterdark
 
 | Extension | Fichier | Miroir x0.at |
 |---|---|---|
-| Afterdark v2 | [AfterdarkProvider.cs3](releases/AfterdarkProvider.cs3) | [AfterdarkProvider.cs3](https://x0.at/mE4M.cs3) |
-| AnimoFlix v3 | [AnimoFlixProvider.cs3](releases/AnimoFlixProvider.cs3) | [AnimoFlixProvider.cs3](https://x0.at/emFN.cs3) |
-| WaveWatch v2 | [WaveWatchProvider.cs3](releases/WaveWatchProvider.cs3) | [WaveWatchProvider.cs3](https://x0.at/Ifc1.cs3) |
-| Zenix v3 | [ZenixProvider.cs3](releases/ZenixProvider.cs3) | [ZenixProvider.cs3](https://x0.at/oqsU.cs3) |
+| Afterdark v3 | [AfterdarkProvider.cs3](releases/AfterdarkProvider.cs3) | [AfterdarkProvider.cs3](https://x0.at/OVnn.cs3) |
+| AnimoFlix v4 | [AnimoFlixProvider.cs3](releases/AnimoFlixProvider.cs3) | [AnimoFlixProvider.cs3](https://x0.at/jQ69.cs3) |
+| WaveWatch v3 | [WaveWatchProvider.cs3](releases/WaveWatchProvider.cs3) | [WaveWatchProvider.cs3](https://x0.at/mb1h.cs3) |
+| Zenix v4 | [ZenixProvider.cs3](releases/ZenixProvider.cs3) | [ZenixProvider.cs3](https://x0.at/gAhv.cs3) |
 
 | Dépôt (repo.json) | Liste d'extensions (plugins.json) |
 |---|---|
-| https://x0.at/PEvE.json | https://x0.at/hkF6.json |
+| https://x0.at/KWVn.json | https://x0.at/gpnX.json |
 
-> ⚠️ Nouveaux miroirs du 14/09 — si vous utilisez les anciens (`zk3V`/`RGc5`…), remplacez-les par ceux-ci (ils resteront valides, mais ceux-ci servent les nouvelles versions).
+> ⚠️ Miroirs du 14/09 (soir) — les derniers en date (correctif 3003). Les précédents (`PEvE`/`hkF6`…) resteront accessibles mais ne servent plus les nouvelles versions : remplacez l'URL du dépôt par celle ci-dessus, ou mettez simplement à jour chaque extension.
