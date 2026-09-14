@@ -210,7 +210,7 @@ class CineStreamProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
         val html = runCatching {
-            app.get(pageUrl(request.name, page), headers = baseHeaders).text
+            app.get(pageUrl(request.data, page), headers = baseHeaders).text
         }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
         val items = parseCards(html)
         // 24 cartes par page sur ce site — en dessous, c'est la fin de la liste.

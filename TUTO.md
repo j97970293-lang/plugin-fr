@@ -316,6 +316,73 @@ Erreurs réelles du 14/09/2026 (2 extensions publiées avec sections cassées) :
 
 ---
 
+### 3.10 LE PIÈGE `request.name` vs `request.data` (cause racine v3 — 5 extensions)
+
+`mainPageOf("films" to "Films")` remplit DEUX champs : `request.data` = la CLÉ
+("films"), `request.name` = le LIBELLÉ ("Films"). **Le routage se fait TOUJOURS
+sur `request.data`** — router sur `request.name` ne lève AUCUNE erreur (le
+`when` tombe dans le `else`) et toutes les sections affichent la même chose.
+
+```
+// ✗ CASSÉ (v2) : tombe toujours dans else → sections identiques
+val url = when (request.name) { "films" -> …; "series" -> …; else -> … }
+// ✓ CORRECT (v3) :
+val url = when (request.data) { "films" -> …; "series" -> …; else -> … }
+```
+Réveil douloureux du 14/09/2026 (après-midi) : les correctifs « catalogue » v2
+étaient JUSTES côté URLs, mais les 5 extensions concernées routaient sur
+`request.name` → l'utilisateur voyait encore 10 sections identiques. Les 4
+extensions saines (AnimoFlix, Zenix, Afterdark, WaveWatch) routaient toutes sur
+`request.data` — la comparaison des 10 fichiers a isolé la cause en 5 minutes.
+**Réflexe : grep -n "request.name" */src/**/*.kt avant chaque release.**
+
+### 3.11 SPA Next.js « sans API » — animesite.fr (reverse complet v3)
+
+Un site Next.js/Turbopack peut paraître impénétrable (SSR vide côté serveur)
+alors que TOUT est accessible. Méthode qui a marché (14/09/2026) :
+
+1. **r.jina.ai** (`https://r.jina.ai/<url>`) rend le SPA complet : on y voit
+   les routes réelles (/search/{q}, /play/{id}/{s}/{e}) et les données.
+2. Les données SSR sont dans le **payload RSC** : `self.__next_f.push([1,"…"])`
+   — concaténer tous les push, dés-échapper (`\"` → `"`) puis parser avec des
+   regex normales. C'est là que dorment les résultats de recherche et le
+   JSON-LD des fiches (saisons : `containsSeason:[{seasonNumber,numberOfEpisodes}]`).
+3. **Grep des chunks JS** (`/_next/static/chunks/*.js`) : `fetch(" (` révèle les
+   endpoints cachés — animesite : `/api/medias?name={trending|added-episode|
+   top-rated}&page=N` (listes), `/api/stream/token` (POST → lecteurs).
+4. **Déobfuscation des IDs** : le bundle contenait `convertIdForUrl = 12*t*28`
+   → l'id interne × 336 = l'id TVDB des URLs. Un coefficient pareil se trouve
+   en cherchant le nom de la fonction dans les chunks puis son corps.
+5. **Slug exact** : l'URL /{tvdbId}-{slug} exige le slug EXACT (test
+   /1698144-nimporte-quoi → fiche vide). Le **sitemap.xml** (2 575 URLs) sert
+   de table id→slug fiable, mise en cache par session.
+6. **Lecteurs proxifiés** : `POST /api/stream/token {idAndSlugTitle,
+   seasonNumber, episodeNumber, playerIndex}` → `{kind, src:"/v/{token}"}` ;
+   la page /v/{token} est une page **SibNet proxifiée** contenant
+   `player.src([{src:'/v/{hash}/{id}.mp4'}])` → le MP4 réel vit sur
+   `https://video.sibnet.ru/v/{hash}/{id}.mp4` (Referer `shell.php?videoid=`
+   obligatoire). kind=external = pub → ignorer. La langue (VOSTFR/VF) se lit
+   dans le og:title de la page /v/.
+
+### 3.12 RECHERCHE DLE : GET = PIÈGE, POST = VÉRITÉ (+ titres français)
+
+Les sites DataLife Engine (fs27/french-stream…) ont DEUX recherches :
+- **GET** `?do=search&story=q` → renvoie le CATALOGUE PAR DÉFAUT (identique
+  pour toute requête) : l'extension « donne autre chose ».
+- **POST** `/index.php` (do, subaction=search, story, search_start=0,
+  full_search=0, result_from=1) → vrais résultats ; requête inconnue →
+  page « Aucun résultat » sans carte.
+  ⚠️ L'inverse existe aussi : **vostfree.ws** est un DLE où le GET marche et le
+  POST renvoie l'accueil → TOUJOURS tester les deux avant de coder.
+- **Titres français** : les API Kitsu/AniList cherchent en EN/romaji
+  (« attaque des titans » → mauvais résultats). Parade Franime v2 : télécharger
+  le catalogue du site lui-même (api.franime.fr/api/animes, ~11 Mo, une fois
+  par session, parsing en flux Jackson pour éviter les pics mémoire) et
+  filtrer sur `titles.fr_fr` en normalisant (NFD, sans accents, mots entiers).
+  Repli automatique sur Kitsu si l'API est bloquée par Cloudflare.
+
+---
+
 ## 4. LA STACK « AGRÉGATEURS TMDB » (sources multi-serveurs)
 
 Tous sont keyés par ID TMDB — réutilisables pour N'IMPORTE QUEL site de streaming
@@ -388,6 +455,14 @@ et les conventions divergent partout.
 | API CloudStream | champs/settings inconnus | `javap -classpath jar com.lagradost.cloudstream3.…` (vérifier AVANT de coder) |
 | `JsUnpacker.unpackAndCombStr` inexistant | compilation KO « Unresolved reference » | API réelle : `JsUnpacker(page).takeIf { it.detect() }?.unpack()` (vérifié par javap sur le jar) |
 | Label de lambda incorrect | « Unresolved label » (`return@findAll`) | Dans `x.findAll(h).forEach { }` le label est `@forEach` — vérifier le nom du récepteur |
+| **Router les sections sur `request.name`** | **10 sections identiques, silencieux** | **Toujours `request.data`** (cf. §3.10) — grep avant release |
+| Recherche DLE en GET | « la recherche donne autre chose » | POSTer /index.php (ou l'inverse selon le site — tester les deux, cf. §3.12) |
+| meta description = nom de fichier | fiche avec « trucs bizarres » (flemmix : « stream-vf-….jpg 1h 40min ») | Chercher le synopsis structuré (bloc « Synopsis: » même commenté) |
+| Bloc épisode `ep00vs` | épisode 0 fantôme sans lecteurs | Filtrer `it > 0` sur les numéros extraits |
+| Slug d'URL construit au jugé | fiche vide (404 soft Next.js) | Sitemap.xml = table id→slug exacte (cache session) |
+| IDs internes ≠ IDs publics | URL introuvable | Chercher la fonction de conversion dans les chunks (× 336 ici) |
+| Titres FR vs API EN | recherche « ne trouve rien » en français | Catalogue du site lui-même (titres fr_fr) + normalisation NFD |
+| ExtractorLink deprecated en erreur | build KO avec newExtractorLink conseillé | `newExtractorLink(name, label, url) { this.type = …; this.referer = … }` |
 | Import ExtractorApi au mauvais endroit | « Unresolved reference 'ExtractorApi' » | `com.lagradost.cloudstream3.utils.ExtractorApi` (pas à la racine cloudstream3) |
 | Regex slug trop stricte | cartes manquantes silencieusement (46/47) | Slugs avec points `2.43-…` → `[a-z0-9.-]+` ; toujours comparer nb de liens trouvés vs nb de liens dans la page |
 | Page de recherche ≠ page catalogue | 0 résultat alors que la recherche répond 200 | Les résultats DLE ont leur propre template → parser SPÉCIFIQUE pour la recherche (cf. §3.5) |

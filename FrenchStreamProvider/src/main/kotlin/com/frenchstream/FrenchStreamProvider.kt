@@ -240,7 +240,7 @@ class FrenchStreamProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
         val html = runCatching {
-            app.get(pageUrl(request.name, page), headers = baseHeaders).text
+            app.get(pageUrl(request.data, page), headers = baseHeaders).text
         }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
         val items = parseCards(html)
         return newHomePageResponse(request, items, hasNext = items.size >= 15)
@@ -248,14 +248,25 @@ class FrenchStreamProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         syncUrl()
+        // IMPORTANT : fs27 (DLE) ignore la recherche en GET (?do=search&story=…)
+        // et renvoie alors le catalogue par défaut — d'où des résultats faux.
+        // Seul le POST vers /index.php renvoie les vrais résultats (vérifié :
+        // « batman » → 18 fiches Batman, requête inconnue → page « Aucun
+        // résultat » sans aucune carte).
         val html = runCatching {
-            app.get(
-                currentUrl() + "/index.php?do=search&subaction=search&story=" +
-                    java.net.URLEncoder.encode(query, "UTF-8"),
+            app.post(
+                currentUrl() + "/index.php",
+                data = mapOf(
+                    "do" to "search", "subaction" to "search", "story" to query,
+                    "search_start" to "0", "full_search" to "0", "result_from" to "1"
+                ),
                 headers = baseHeaders
             ).text
         }.getOrNull() ?: return emptyList()
-        return parseCards(html)
+        val results = parseCards(html)
+        // Sécurité : si la page ne contient aucune carte, on ne renvoie rien
+        // (page « Aucun résultat ») plutôt qu'un contenu hors sujet.
+        return results
     }
 
     /** Cartes DLE : <a class="short-poster…" href="/index.php?newsid=X" alt="TITRE"> … <img src="poster"> */

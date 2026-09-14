@@ -234,15 +234,15 @@ class FlemmixProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
-        if (request.name == "accueil" && page > 1) {
+        if (request.data == "accueil" && page > 1) {
             return newHomePageResponse(request, emptyList(), false)
         }
         val html = runCatching {
-            app.get(pageUrl(request.name, page), headers = baseHeaders).text
+            app.get(pageUrl(request.data, page), headers = baseHeaders).text
         }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
         // L'accueil n'a que les carrousels ; les catégories ont le listing « mov »
         // (on ignore leur carrousel partagé pour éviter des sections identiques).
-        val items = if (request.name == "accueil") parseCards(html) else parseMovCards(html)
+        val items = if (request.data == "accueil") parseCards(html) else parseMovCards(html)
         return newHomePageResponse(request, items, hasNext = items.size >= 15)
     }
 
@@ -331,10 +331,23 @@ class FlemmixProvider : MainAPI() {
         val title = doc.selectFirst("h1")?.text()?.trim()
             ?: Regex("""<title>([^<]+?)\s*(?:&raquo;|»|\|)""").find(html)?.groupValues?.get(1)?.trim()
             ?: url.trimEnd('/').substringAfterLast('/').substringAfter('-').replace('-', ' ')
-        val poster = doc.selectFirst("meta[property=og:image]")?.attr("content")
-            ?: Regex("""(?:poster|image)"?\s*(?:content|=)\s*"([^"]+\.(?:jpg|png|webp))"""").find(html)?.groupValues?.get(1)
-        val plot = doc.selectFirst("meta[name=description]")?.attr("content")?.trim()
-        val year = Regex("""\b(19|20)\d{2}\b""").find(html)?.value?.toIntOrNull()
+        // Poster réel de la fiche : <img id="posterimg" src="/checkimg.php?urli=…">
+        // (og:image absent ; meta[name=description] = nom de fichier du poster
+        // + durée — inutilisable comme synopsis, d'où les « trucs bizarres »).
+        val posterRaw = doc.selectFirst("img#posterimg")?.attr("src")
+            ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
+        val poster = posterRaw?.let { if (it.startsWith("http")) it else currentUrl() + it }
+        // Synopsis : bloc structuré « Synopsis: » de la fiche (lisible même quand
+        // le site le met en commentaire HTML).
+        val plot = Regex("""Synopsis:</div>\s*<div class="mov-desc">\s*(?:<span[^>]*>)?([^<]+)""")
+            .find(html)?.groupValues?.get(1)?.trim()
+            ?: doc.selectFirst("meta[property=og:description]")?.attr("content")?.trim()
+                ?.takeIf { it.isNotBlank() && !it.contains(".jpg") }
+        // Année : « Date de sortie: » de la fiche, sinon année dans le titre
+        val year = Regex("""Date de sortie:</div>\s*<div class="mov-desc">[^<]*?(\d{4})""")
+            .find(html)?.groupValues?.get(1)?.toIntOrNull()
+            ?: Regex("""\((19|20)\d{2}\)""").find(title ?: "")?.value?.trim('(', ')')?.toIntOrNull()
+            ?: Regex("""\b(19|20)\d{2}\b""").find(html)?.value?.toIntOrNull()
 
         // Serveurs d'un film : tous les loadVideo de la page
         val filmServers = parseLoadVideo(html)
@@ -342,8 +355,10 @@ class FlemmixProvider : MainAPI() {
 
         if (isSeries) {
             // Série : blocs ep{N}vs (VOSTFR) / ep{N}vf (VF)
-            val epsVs = Regex("""<div class="ep(\d+)vs"""").findAll(html).map { it.groupValues[1].toInt() }.toList()
-            val epsVf = Regex("""<div class="ep(\d+)vf"""").findAll(html).map { it.groupValues[1].toInt() }.toList()
+            // Le bloc « ep00 » (numéro 0) est un bloc spécial (saison complète),
+            // PAS l'épisode 1 → on l'ignore (sinon épisode fantôme sans lecteurs).
+            val epsVs = Regex("""<div class="ep(\d+)vs"""").findAll(html).map { it.groupValues[1].toInt() }.filter { it > 0 }.toList()
+            val epsVf = Regex("""<div class="ep(\d+)vf"""").findAll(html).map { it.groupValues[1].toInt() }.filter { it > 0 }.toList()
             val allEps = (epsVs + epsVf).distinct().sorted()
             if (allEps.isNotEmpty()) {
                 val subbed = epsVs.map { n ->

@@ -174,7 +174,7 @@ class FranimeProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
         val offset = (page - 1) * 20
-        val url = when (request.name) {
+        val url = when (request.data) {
             "trending" -> {
                 if (page > 1) return newHomePageResponse(request, emptyList(), false)
                 "$KITSU/trending/anime?limit=20"
@@ -192,8 +192,109 @@ class FranimeProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         syncUrl()
+        // 1) Recherche dans le catalogue FRAnime lui-même (≈ 1 500 animes,
+        //    titres FR inclus : « attaque des titans », « les chevaliers du
+        //    zodiaque »… trouvent leur anime). L'index est construit une fois
+        //    par session (parsing en streaming : pas de pic mémoire).
+        //    Kitsu filter[text] se plante en effet sur les titres français.
+        val fromCatalog = runCatching { searchCatalog(query) }.getOrDefault(emptyList())
+        if (fromCatalog.isNotEmpty()) return fromCatalog
+        // 2) Repli : recherche Kitsu (titres anglais/romaji)
         val url = "$KITSU/anime?filter%5Btext%5D=${java.net.URLEncoder.encode(query, "UTF-8")}&page%5Blimit%5D=20"
         return fetchKitsuList(url).mapNotNull { it.toSearchResponse() }
+    }
+
+    /** Index du catalogue FRAnime gardé en mémoire (une session d'app). */
+    private class CatalogEntry(val id: String, val fr: String?, val en: String?, val poster: String?)
+
+    private var catalogIndex: List<CatalogEntry>? = null
+    private var catalogIndexAt = 0L
+
+    private fun normalizeTitle(s: String): String {
+        val low = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^\\p{L}\\p{N} ]"), " ")
+        return Regex("\\s+").replace(low, " ").trim()
+    }
+
+    /** Télécharge (1×/session) /api/animes et ne garde que id + titres + affiche. */
+    private suspend fun buildCatalogIndex(): List<CatalogEntry> {
+        catalogIndex?.let { return it }
+        // périmé après 12 h → on re-télécharge
+        val now = System.currentTimeMillis()
+        val cached = catalogIndex
+        if (cached != null && now - catalogIndexAt < 12 * 3600_000L) {
+            return cached
+        }
+        val body = app.get(apiBase() + "/animes", headers = apiHeaders(), interceptor = cfKiller).text
+        val entries = mutableListOf<CatalogEntry>()
+        // Parsing en flux : un nœud « anime » à la fois (le JSON fait ~11 Mo,
+        // readTree complet ferait un pic mémoire de ~100 Mo sur mobile).
+        val parser = mapper.factory.createParser(body)
+        var inArray = false
+        while (true) {
+            val token = parser.nextToken() ?: break
+            if (token.isScalarValue) continue
+            when {
+                token == com.fasterxml.jackson.core.JsonToken.START_ARRAY -> inArray = true
+                token == com.fasterxml.jackson.core.JsonToken.START_OBJECT && inArray -> {
+                    val node: com.fasterxml.jackson.databind.JsonNode = mapper.readTree(parser)
+                    val id: String = node.path("id").asText(null) ?: continue
+                    if (id.isEmpty()) continue
+                    val titles: com.fasterxml.jackson.databind.JsonNode? = node.get("titles")
+                    fun t(field: String): String? {
+                        val n = titles?.get(field) ?: return null
+                        if (!n.isTextual) return null
+                        return n.asText().trim().takeIf { it.isNotEmpty() }
+                    }
+                    val fr = t("fr_fr")
+                    val en = t("en") ?: t("en_us")
+                    val original = node.path("titleO").asText(null)?.trim()?.takeIf { it.isNotEmpty() }
+                    if (fr == null && en == null && original == null) continue
+                    val poster = node.path("affiche").asText(null)?.takeIf { it.isNotEmpty() }
+                    entries += CatalogEntry(id, fr, en ?: original, poster)
+                }
+                else -> {}
+            }
+        }
+        catalogIndex = entries
+        catalogIndexAt = now
+        return entries
+    }
+
+    private suspend fun searchCatalog(query: String): List<SearchResponse> {
+        val q = normalizeTitle(query)
+        if (q.isEmpty()) return emptyList()
+        val words = q.split(" ").filter { it.length > 1 }
+        if (words.isEmpty()) return emptyList()
+        // (entrée, score, titre affiché)
+        val hits = mutableListOf<Triple<CatalogEntry, Int, String>>()
+        for (e in buildCatalogIndex()) {
+            val candidates = sequenceOf(e.fr, e.en).filterNotNull().map { normalizeTitle(it) }
+            var best = 0
+            var bestTitle: String? = null
+            for (c in candidates) {
+                if (c.isEmpty()) continue
+                val allWords = words.all { w -> c.contains(w) }
+                if (!allWords) continue
+                val score = when {
+                    c == q -> 100
+                    c.startsWith(q) -> 80
+                    else -> 40
+                } + (if (e.fr != null && c == normalizeTitle(e.fr)) 20 else 0)
+                if (score > best) { best = score; bestTitle = c }
+            }
+            if (best > 0) {
+                val display = e.fr ?: e.en ?: continue
+                hits += Triple(e, best, display)
+            }
+        }
+        return hits.sortedByDescending { it.second }.take(25).map { (entry, _, display) ->
+            newAnimeSearchResponse(display, "$mainUrl/anime/${entry.id}", TvType.Anime) {
+                this.posterUrl = entry.poster
+                this.otherName = entry.en?.takeIf { it != display }
+            }
+        }
     }
 
     private suspend fun fetchKitsuList(url: String): List<KitsuItem> = runCatching {
@@ -283,7 +384,6 @@ class FranimeProvider : MainAPI() {
                     this.name = ep.title?.takeIf { it.isNotBlank() && !it.startsWith("Épisode") }
                     this.season = season.seasonNumber
                     this.episode = ep.number?.toInt() ?: (episodeIndex + 1)
-                    this.posterUrl = ep.thumbnail
                 }
             }
         }

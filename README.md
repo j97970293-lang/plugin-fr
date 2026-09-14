@@ -1,6 +1,6 @@
 # Plugin fr · Dépôt d'extensions CloudStream (`.cs3`)
 
-Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **dix extensions** :
+Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **onze extensions** :
 
 | Extension | Site | Contenu |
 |---|---|---|
@@ -14,7 +14,40 @@ Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream)
 | **VostfreeProvider** | [vostfree.ws](https://vostfree.ws/) | **animes VF & VOSTFR** + films d'animation (Sibnet, Uqload, Dood, Voe, Opvid…) |
 | **AnimeSamaProvider** | [anime-sama.to](https://anime-sama.to/) | **animes VF & VOSTFR** — catalogue complet, saisons, films & miroirs multiples |
 | **CineStreamProvider** | [cinestream.info](https://cinestream.info/) | **films VF/VOSTFR** — 15 lecteurs par titre (Vidara, Voe, Uqload, Vidmoly, StreamWish, FileLions…) |
+| **AnimeSiteProvider** | [animesite.fr](https://animesite.fr/) | **animes VF & VOSTFR** — lecteurs SibNet MP4 directs, +2 500 animés (recherche EN/romaji) |
 
+
+## 🔧🔧 Correctif v3 du 14 septembre (après-midi) — cause racine des catalogues identiques + recherches + AnimeSite (11 extensions)
+
+> Ré-analyse complète des sites de fond en comble (r.jina.ai + reverse des bundles JS) **avant** toute modification, comme demandé.
+
+### Le vrai bug des « catalogues identiques » (5 extensions)
+
+Les correctifs v2 étaient bons côté URLs, mais les 5 extensions routaient leurs sections sur `request.name` (le libellé affiché) au lieu de `request.data` (la clé) : le `when` tombait **toujours** dans le `else` → chaque section affichait la même chose (FrenchStream/Franime : les films ; Flemmix : le carrousel d'accueil). Corrigé dans **FrenchStream v3, Flemmix v3, Vostfree v2, CineStream v2, Franime v2** — les sections sont maintenant réellement distinctes (vérifié page 1 ≠ page 2 ≠ autre section).
+
+### Recherches corrigées (« ça donne autre chose ou rien »)
+
+| Extension | Problème trouvé | Correctif v3 |
+|---|---|---|
+| **FrenchStream v3** | la recherche **GET** de fs27 renvoie *toujours* le catalogue par défaut (page identique octet par octet pour toute requête !) → résultats hors sujet | bascule en **POST** DLE : « batman » → 18 fiches Batman, « spider » → 18 Spider-Man, requête inconnue → 0 résultat propre |
+| **Franime v2** | l'API Kitsu cherche en anglais/romaji : « attaque des titans » → *Whisper of the Heart*, « les chevaliers du zodiaque » → *Aku no Hana* | la recherche passe par le **catalogue FRAnime lui-même** (titres français `fr_fr`, ~11 Mo téléchargés une fois par session, parsing en flux) avec repli Kitsu automatique |
+| **Flemmix v3** | fiches « bizarres » : la meta description du site est littéralement le *nom de fichier du poster* (« stream-vf-….jpg 1h 40min »), og:image absent, année prise au hasard dans le HTML, et un bloc `ep00` créait un épisode 0 fantôme sans lecteurs | synopsis du bloc structuré (même commenté dans le HTML), poster `#posterimg`, année « Date de sortie », épisode 0 ignoré |
+| **CineStream v2 / Vostfree v2** | (victimes du seul bug `request.name`) | routage corrigé — les recherches étaient déjà bonnes côté serveur (testées : accents inclus) |
+| **Franime v2** | affiche sur chaque épisode | retirée (« comme avant ») |
+
+### 🆕 AnimeSiteProvider (v1) — animesite.fr, 11ᵉ extension
+
+Écarté le matin même comme « SPA sans API »… la ré-analyse de l'après-midi (r.jina.ai + reverse des chunks Next.js) a tout débloqué :
+- **Catalogues** : API cachée `/api/medias?name={trending|added-episode|top-rated}&page=N` — Tendances, Nouveaux épisodes, Les mieux notés (paginés).
+- **Recherche** : `/search/{q}` — résultats dans le payload RSC (render server components) décodé.
+- **+2 500 animés** : conversion des IDs internes (× 336 = ID TVDB, trouvée dans le bundle) + sitemap.xml pour les slugs exacts.
+- **Lecteurs** : `POST /api/stream/token` → page SibNet proxifiée → **MP4 directs** (VOSTFR + VF sondés automatiquement, liens externes/pub ignorés).
+- **Fiches** : saisons & nombre d'épisodes via le JSON-LD de la fiche, synopsis/affiche/genres/année.
+
+### Enquête « wiflix » & sites re-testés
+
+- **wiflix.voto** = domaine **parqué** (annuaire de pubs) — le vrai « wiflix » que vous voyez est **flemmix.cloud** (le site s'affiche lui-même « wiflix » dans ses titres !) → c'est FlemmixProvider, corrigé en v3.
+- Re-testés via r.jina.ai : **dulourd.hair** (bouton « Regarder » → ferme à pub topnox, aucun lecteur réel : exclu), **purstream.ad** (coquille vide), **movix.online** (vitrine vers movix.men, déjà intégré), **andoks.cc / novastream.top** (coquilles vides), **moiflix.org** (redirige vers moiflix.fans, sans lecteurs ouverts) — aucun n'est exploitable.
 
 ## 🔧 Correctif du 14 septembre (midi) — catalogues répétitifs corrigés + CineStream (FrenchStream v2, Flemmix v2, CineStream v1)
 
@@ -53,7 +86,7 @@ Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream)
 - **Release la plus récente** : [fix-v1-2026-09-14 (Pre-release)](https://github.com/j97970293-lang/plugin-fr/releases/tag/fix-v1-2026-09-14) — les 10 `.cs3` en pièces jointes
 - **Fichiers individuels (miroirs x0.at, dernières versions)** : CineStream `https://x0.at/Oybz.cs3` · FrenchStream v2 `https://x0.at/ljPN.cs3` · Flemmix v2 `https://x0.at/ItKX.cs3` · Vostfree `https://x0.at/oBeg.cs3` · Anime-Sama `https://x0.at/erhU.cs3` · Afterdark v5 `https://x0.at/m0B9.cs3` · WaveWatch v5 `https://x0.at/Gigc.cs3` · Zenix v6 `https://x0.at/bgCH.cs3` · plugins.json `https://x0.at/2h6o.json`
 
-> ℹ️ **Pourquoi ces sites ?** Les 9 adresses proposées ont toutes été examinées : `purstream.ad` (lecteur verrouillé par veske.io), `dulourd.hair` (Turnstile obligatoire), `animesite.fr` (SPA sans API accessible), `1jour1film` (recherche bloquée, lecteurs déjà couverts par les agrégateurs existants) et `movix.online` (identique à movix.men déjà intégré) ont été écartées — tout le reste est intégré.
+> ℹ️ **Pourquoi ces sites ?** Les 9 adresses proposées ont toutes été examinées : `purstream.ad` (lecteur verrouillé par veske.io), `dulourd.hair` (Turnstile obligatoire), `animesite.fr` (SPA « sans API »… jusqu'à la ré-analyse v3 qui a trouvé l'API cachée → intégré en v3), `1jour1film` (recherche bloquée, lecteurs déjà couverts par les agrégateurs existants) et `movix.online` (identique à movix.men déjà intégré) ont été écartées — tout le reste est intégré.
 
 ## 🆕 Nouveauté du 14 septembre — FRAnime v1 (animes VF/VOSTFR)
 
