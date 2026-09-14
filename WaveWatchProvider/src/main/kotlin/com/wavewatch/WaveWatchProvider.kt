@@ -685,6 +685,7 @@ class WaveWatchProvider : MainAPI() {
             aggregators += async(Dispatchers.IO) { runCatching { playerixLinks(tmdb, season, episode, m3u8Only = isTv) }.getOrDefault(emptyList()) }
             aggregators += async(Dispatchers.IO) { runCatching { movixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
             aggregators += async(Dispatchers.IO) { runCatching { movixFstreamLinks(tmdb, season) }.getOrDefault(emptyList()) }
+            aggregators += async(Dispatchers.IO) { runCatching { moviesApiLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
             // mouve : films uniquement — en TV la majorité des liens ne dépendent pas
             // de l'épisode demandé (vérifié : mêmes URLs pour 2x1 et 2x2).
             if (!isTv) {
@@ -711,6 +712,18 @@ class WaveWatchProvider : MainAPI() {
             }
 
             aggregators.awaitAll().forEach { addHostLinks(it) }
+
+            // ---- Lecteurs publics TMDB (best-effort, films + épisodes) ----
+            val publicEmbeds = if (season != null && episode != null) {
+                listOf(
+                    "https://vidnest.fun/tv/$tmdb/$season/$episode" to "VidNest"
+                )
+            } else {
+                listOf(
+                    "https://vidnest.fun/movie/$tmdb" to "VidNest"
+                )
+            }
+            addHostLinks(publicEmbeds.map { (u, label) -> HostLink(u, null, label, "embed") })
 
             // ---- Lecteurs externes de la liste du site ----
             siteSources = siteAsync.await()
@@ -1149,7 +1162,10 @@ class WaveWatchProvider : MainAPI() {
         } else {
             "https://api.movix.cash/api/tmdb/movie/$tmdb"
         }
-        val json = app.get(url, headers = baseHeaders).text
+        // api.movix.cash est l'adresse historique, movix.men l'adresse officielle 2026 — on tente les deux
+        val json = runCatching { app.get(url, headers = baseHeaders).text }.getOrNull()
+            ?: runCatching { app.get(url.replace("api.movix.cash", "api.movix.men"), headers = baseHeaders).text }.getOrNull()
+            ?: return emptyList()
         val root = AppUtils.parseJson<MovixResponse>(json)
         val links = root.playerLinks ?: root.currentEpisode?.playerLinks ?: return emptyList()
         return links.filter { !it.decodedUrl.isNullOrBlank() }.mapNotNull { p ->
@@ -1162,11 +1178,30 @@ class WaveWatchProvider : MainAPI() {
         }
     }
 
+    /** moviesapi.to — lecteur public TMDB (API interne /api/vidora, best-effort,
+     *  silencieux quand le contenu n'est pas disponible). */
+    private suspend fun moviesApiLinks(tmdb: String, season: Int?, episode: Int?): List<HostLink> {
+        val path = if (season != null && episode != null) "/v1/tv/$tmdb/$season/$episode" else "/v1/movie/$tmdb"
+        val json = runCatching {
+            app.get(
+                "https://moviesapi.to/api/vidora$path",
+                headers = baseHeaders + mapOf(
+                    "x-player-key" to "3a67e8866ae1d2bb9e81fe7f73315a56eb3bdf5e3e755c7554c8be6910aa6b13",
+                    "accept" to "application/json"
+                )
+            ).text
+        }.getOrNull() ?: return emptyList()
+        // réponse : { result: true, sources: [ { url, tracks: [...] } ], title, … }
+        val url = Regex(""""url"\s*:\s*"(https?://[^"]+)"""").find(json)?.groupValues?.get(1) ?: return emptyList()
+        return listOf(HostLink(url, null, "MoviesApi", "moviesapi", direct = url.contains(".m3u8")))
+    }
+
     /** api.movix.cash/api/fstream/… — liens french-stream avec vraies étiquettes VFQ/VF/VOSTFR (films). */
     private suspend fun movixFstreamLinks(tmdb: String, season: Int?): List<HostLink> {
         if (season != null) return emptyList() // films uniquement
         val json = runCatching {
             app.get("https://api.movix.cash/api/fstream/movie/$tmdb", headers = baseHeaders).text
+                .ifBlank { app.get("https://api.movix.men/api/fstream/movie/$tmdb", headers = baseHeaders).text }
         }.getOrNull() ?: return emptyList()
         val root = AppUtils.parseJson<MovixFstreamResponse>(json)
         val out = mutableListOf<HostLink>()

@@ -1,6 +1,6 @@
 # Plugin fr · Dépôt d'extensions CloudStream (`.cs3`)
 
-Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **cinq extensions** :
+Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **neuf extensions** :
 
 | Extension | Site | Contenu |
 |---|---|---|
@@ -9,7 +9,32 @@ Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream)
 | **WaveWatchProvider** | [wavewatch.top](https://wavewatch.top/) | films, séries, animes & **TV en direct** en VF / VOSTFR |
 | **AfterdarkProvider** | [afd926.mom](https://afd926.mom/) (miroir de afterdark.best) | films & séries en **VOSTFR** (multi-serveurs) |
 | **FranimeProvider** | [franime.fr](https://franime.fr/) | **animes en VF & VOSTFR** (saisons, films) — lecteurs Sibnet, VidMoly, FileMoon… |
+| **FrenchStreamProvider** | [fs27.lol](https://fs27.lol/) (adresse courante de french-stream) | films, séries & animes en **VF / VFQ / VOSTFR** — Uqload, Vidzy, FileMoon (Vidara), FS Premium… |
+| **FlemmixProvider** | [flemmix.cloud](https://flemmix.cloud/) | films & séries VF/VOSTFR — jusqu'à **16 lecteurs** par titre (Vidara, Uqload, VidMoly, Voe…) |
+| **VostfreeProvider** | [vostfree.ws](https://vostfree.ws/) | **animes VF & VOSTFR** + films d'animation (Sibnet, Uqload, Dood, Voe, Opvid…) |
+| **AnimeSamaProvider** | [anime-sama.to](https://anime-sama.to/) | **animes VF & VOSTFR** — catalogue complet, saisons, films & miroirs multiples |
 
+
+## 🆕🆕 Nouveauté du 14 septembre (matin) — 4 nouvelles extensions + plus de serveurs (French Stream, Flemmix, Vostfree, Anime-Sama · Afterdark v5, WaveWatch v5, Zenix v6)
+
+### 4 nouvelles extensions
+
+| Extension | Détail |
+|---|---|
+| **FrenchStreamProvider** (v1) | **french-stream** via son adresse courante `fs27.lol` : films via `film_api`, séries & animes via `static/series` — **VOSTFR, VF, VFQ et VO** distingués, jusqu'à ~10 lecteurs par titre (**Uqload, Vidzy, FileMoon/Vidara, FS Premium (fsvid), Kokoflix, Netu/Kakaflix, Dood, Voe…**), extraits par notre extracteur Vidara éprouvé + décodage XOR vidzy/fsvid + docteur de liens ; recherche DLE complète |
+| **FlemmixProvider** (v1) | **flemmix.cloud** : films avec **jusqu'à 16 lecteurs inline** (Vidara, Voe, LuLuTV, Uqload…), séries avec épisodes **VOSTFR (vs) + VF (vf)** ; catalogue paginé (30 titres/page) ; la recherche du site est neutralisée par son « bot shield » → navigation par catalogues (films/séries/animes), le bouton Réglages permet de changer l'adresse |
+| **VostfreeProvider** (v1) | **vostfree.ws** (DLE Animix) : 1 fiche = un anime **complet** (jusqu'à 346 épisodes détectés sur One Piece) avec tous ses lecteurs (**Sibnet, Uqload, Mytv/Myvi, Dood, Voe, Opvid, VidMoly, CloudVideo…**) ; recherche opérationnelle (« naruto » → 6 résultats VF/VOSTFR) ; VF signalée dans le titre |
+| **AnimeSamaProvider** (v1) | **anime-sama.to** : catalogue + recherche (fetch.php), saisons groupées par nom (« Saga 1 (East Blue) »…), épisodes via `episodes.js` avec **miroirs multiples par épisode** (eps1/eps2…), films d'animes inclus ; lecteurs AnsEmbed via JwPlayerHelper (déjà éprouvés dans AnimoFlix) |
+
+### 3 extensions enrichies (encore plus de serveurs)
+
+| Extension | Nouveaux serveurs |
+|---|---|
+| **Afterdark v5** | **MoviesApi** (API interne `/api/vidora` — films & épisodes, best-effort silencieux), **VidNest** (extracteur intégré CloudStream), et le fallback **movix.men** en plus de `api.movix.cash` (les deux domaines sont essayés) |
+| **WaveWatch v5** | idem : MoviesApi + VidNest + fallback movix.men (movix & french-stream) |
+| **Zenix v6** | idem : MoviesApi + VidNest + fallback movix.men (movix & french-stream) |
+
+> ℹ️ **Pourquoi ces sites ?** Les 9 adresses proposées ont toutes été examinées : `purstream.ad` (lecteur verrouillé par veske.io), `dulourd.hair` (Turnstile obligatoire), `animesite.fr` (SPA sans API accessible), `1jour1film` (recherche bloquée, lecteurs déjà couverts par les agrégateurs existants) et `movix.online` (identique à movix.men déjà intégré) ont été écartées — tout le reste est intégré.
 
 ## 🆕 Nouveauté du 14 septembre — FRAnime v1 (animes VF/VOSTFR)
 

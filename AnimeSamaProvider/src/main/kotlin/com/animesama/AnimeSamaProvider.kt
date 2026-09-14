@@ -1,0 +1,580 @@
+package com.animesama
+
+import com.lagradost.cloudstream3.DubStatus
+import com.lagradost.cloudstream3.Episode
+import com.lagradost.cloudstream3.ErrorLoadingException
+import com.lagradost.cloudstream3.HomePageResponse
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.ShowStatus
+import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.USER_AGENT
+import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.mainPageOf
+import com.lagradost.cloudstream3.newAnimeLoadResponse
+import com.lagradost.cloudstream3.newAnimeSearchResponse
+import com.lagradost.cloudstream3.newEpisode
+import com.lagradost.cloudstream3.newHomePageResponse
+import com.lagradost.cloudstream3.plugins.Plugin
+import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
+import com.lagradost.cloudstream3.extractors.helper.JwPlayerHelper
+import com.lagradost.cloudstream3.utils.ExtractorApi
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.JsUnpacker
+import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.sync.Semaphore
+import org.jsoup.Jsoup
+
+/**
+ * Entry point of the plugin, this is the class that CloudStream loads.
+ */
+@CloudstreamPlugin
+class AnimeSamaPlugin : Plugin() {
+    override fun load(context: android.content.Context) {
+        AnimeSamaProvider.appContext = context.applicationContext
+        registerMainAPI(AnimeSamaProvider())
+        // ansembed.net — lecteur JWPlayer utilisé par Anime-Sama
+        registerExtractorAPI(AnsEmbed())
+        openSettings = { ctx -> AnimeSamaProvider.showSettings(ctx) }
+    }
+}
+
+/**
+ * ansembed.net — clone VidMoly (JWPlayer) : sources: [{ file: 'https://…/master.m3u8' }]
+ */
+class AnsEmbed : ExtractorApi() {
+    override val name = "AnsEmbed"
+    override val mainUrl = "https://ansembed.net"
+    override val requiresReferer = true
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val headers = mapOf(
+            "user-agent" to USER_AGENT,
+            "Sec-Fetch-Dest" to "iframe"
+        )
+        val document = app.get(url, headers = headers, referer = referer).document
+        val script = document.select("script")
+            .firstOrNull { it.data().contains("sources:") }
+            ?.data()
+            ?: throw ErrorLoadingException("No JWPlayer sources found")
+
+        JwPlayerHelper.extractStreamLinks(script, name, mainUrl, callback, subtitleCallback)
+    }
+}
+
+// ===========================================================================
+// Anime-Sama (anime-sama.to) — catalogue d'animes VF/VOSTFR
+//   · Catalogue : /catalogue/ (une grande page). Recherche : POST
+//     /template-php/defaut/fetch.php {query} (ouverte).
+//   · Fiche anime : poster og:image (GitHub), saisons déclarées par
+//     panneauAnime("Saison 1", "saison1/vostfr") — plusieurs appels, l'URL est
+//     relative à /catalogue/{slug}/ et le suffixe donne la langue (vostfr|vf).
+//   · Page saison : /catalogue/{slug}/{saison}/{lang}/ contient
+//     <script src='episodes.js?filever=N'> (RELATIF) définissant
+//     var eps1 = ['URL ép.1', 'URL ép.2', …] — un tableau par lecteur
+//     (eps2, eps3… = miroirs du même épisode).
+//   · Lecteurs : ansembed.net (JW), sibnet, vidmoly, sendvid, uqload…
+// ===========================================================================
+class AnimeSamaProvider : MainAPI() {
+
+    override var mainUrl = DEFAULT_URL
+    override var name = "AnimeSama"
+    override val hasMainPage = true
+    override var lang = "fr"
+    override val supportedTypes = setOf(TvType.Anime, TvType.AnimeMovie, TvType.OVA)
+
+    // -------------------------------------------------------------------------
+    // Réglages
+    // -------------------------------------------------------------------------
+    companion object {
+        const val DEFAULT_URL = "https://anime-sama.to"
+
+        @Volatile
+        var appContext: android.content.Context? = null
+
+        private const val PREFS_NAME = "animesama_settings"
+        private const val PREF_URL = "site_url"
+
+        fun currentUrl(): String = runCatching {
+            appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                ?.getString(PREF_URL, null)
+                ?.trim()?.trimEnd('/')
+                ?.takeIf { it.startsWith("http") }
+        }.getOrNull() ?: DEFAULT_URL
+
+        fun setSiteUrl(context: android.content.Context, url: String?) {
+            context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_URL, url?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") })
+                .apply()
+        }
+
+        fun showSettings(context: android.content.Context) {
+            val input = android.widget.EditText(context).apply {
+                setText(currentUrl())
+                hint = "https://…"
+            }
+            val pad = (context.resources.displayMetrics.density * 20).toInt()
+            val layout = android.widget.LinearLayout(context).apply {
+                setPadding(pad, pad / 2, pad, 0)
+                addView(input)
+            }
+            android.app.AlertDialog.Builder(context)
+                .setTitle("Adresse d'Anime-Sama")
+                .setMessage("Le site change de domaine (anime-sama.to, .fr, .com…). Indiquez l'adresse actuelle.")
+                .setView(layout)
+                .setPositiveButton("Enregistrer") { _, _ -> setSiteUrl(context, input.text.toString()) }
+                .setNegativeButton("Annuler", null)
+                .setNeutralButton("Par défaut") { _, _ -> setSiteUrl(context, DEFAULT_URL) }
+                .show()
+        }
+    }
+
+    private fun syncUrl() {
+        mainUrl = currentUrl()
+    }
+
+    private val baseHeaders get() = mapOf(
+        "User-Agent" to USER_AGENT,
+        "Accept-Language" to "fr-FR,fr;q=0.9"
+    )
+
+    // -------------------------------------------------------------------------
+    // Accueil & recherche
+    // -------------------------------------------------------------------------
+    override val mainPage = mainPageOf(
+        "catalogue" to "Catalogue complet"
+    )
+
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        syncUrl()
+        if (page > 1) return newHomePageResponse(request, emptyList(), false)
+        val html = runCatching {
+            app.get(currentUrl() + "/catalogue/", headers = baseHeaders).text
+        }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
+        val items = parseCatalogue(html)
+        return newHomePageResponse(request, items, hasNext = false)
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        syncUrl()
+        val html = runCatching {
+            app.post(
+                currentUrl() + "/template-php/defaut/fetch.php",
+                referer = currentUrl() + "/",
+                headers = baseHeaders,
+                data = mapOf("query" to query)
+            ).text
+        }.getOrNull() ?: return emptyList()
+        val out = mutableListOf<SearchResponse>()
+        Regex(
+            """<a\s+href="([^"]+/catalogue/([a-z0-9.-]+)/?)"[^>]*class="asn-search-result"[^>]*>.*?<img[^>]+src="([^"]+)".*?<h3[^>]*>([^<]+)</h3>""",
+            RegexOption.DOT_MATCHES_ALL
+        ).findAll(html).forEach { m ->
+            val url = m.groupValues[1]
+            val poster = m.groupValues[3]
+            val title = htmlUnescape(m.groupValues[4]).trim()
+            if (title.isNotBlank()) {
+                out += newAnimeSearchResponse(title, url, TvType.Anime) { this.posterUrl = poster }
+            }
+        }
+        return out.distinctBy { it.url }.ifEmpty { parseCatalogue(html) }
+    }
+
+    /** Décode les entités HTML courantes des titres. */
+    private fun htmlUnescape(s: String): String = s
+        .replace("&amp;", "&").replace("&quot;", "\"")
+        .replace("&#039;", "'").replace("&apos;", "'")
+        .replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ")
+
+    /** Cartes du catalogue : <a href="…/catalogue/{slug}"><img class="card-image" src=… alt="{titre}"> */
+    private fun parseCatalogue(html: String): List<SearchResponse> {
+        val out = mutableListOf<SearchResponse>()
+        Regex(
+            """<a\s+href="((?:https?://[^"]+)?/catalogue/([a-z0-9.-]+))/?"[^>]*>\s*<div[^>]*>\s*<img[^>]+src="([^"]+)"[^>]+alt="([^"]*)""""
+        ).findAll(html).forEach { m ->
+            val href = m.groupValues[1]
+            val url = if (href.startsWith("http")) href else currentUrl() + href
+            val poster = m.groupValues[3]
+            val title = htmlUnescape(m.groupValues[4]).trim().ifBlank { m.groupValues[2].replace('-', ' ') }
+            out += newAnimeSearchResponse(title, url, TvType.Anime) { this.posterUrl = poster }
+        }
+        return out.distinctBy { it.url }
+    }
+
+    // -------------------------------------------------------------------------
+    // Fiche : saisons déclarées par panneauAnime + comptage via episodes.js
+    // -------------------------------------------------------------------------
+    override suspend fun load(url: String): LoadResponse {
+        syncUrl()
+        val slug = url.trimEnd('/').substringAfterLast('/')
+        val html = runCatching {
+            app.get("$mainUrl/catalogue/$slug/", headers = baseHeaders).text
+        }.getOrNull() ?: throw ErrorLoadingException("Fiche inaccessible")
+
+        val doc = Jsoup.parse(html)
+        val title = doc.selectFirst("h1")?.text()?.trim()
+            ?: doc.selectFirst("meta[property=og:title]")?.attr("content")?.trim()
+            ?: slug.replace('-', ' ')
+        val poster = doc.selectFirst("meta[property=og:image]")?.attr("content")
+        val plot = doc.selectFirst("meta[property=og:description]")?.attr("content")?.trim()
+            ?: doc.selectFirst("meta[name=description]")?.attr("content")?.trim()
+
+        // saisons : panneauAnime("Nom", "chemin")
+        val entries = Regex("""panneauAnime\("([^"]+)",\s*"([^"]+)"\)""")
+            .findAll(html).map { it.groupValues[1] to it.groupValues[2] }
+            .filter { it.first != "nom" && it.second != "url" } // en-tête du template
+            .toList()
+        if (entries.isEmpty()) throw ErrorLoadingException("Aucune saison trouvée sur cette fiche.")
+
+        // Regroupe par nom (Saison 1 vostfr + Saison 1 vf = une entrée)
+        data class SeasonInfo(val name: String, val paths: List<String>, val seasonNumber: Int?)
+        val byName = entries.groupBy({ it.first }, { it.second })
+            .map { (name, paths) ->
+                val num = Regex("""(?:saison|season)\s*(\d+)""", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)?.toIntOrNull()
+                SeasonInfo(name, paths.distinct(), num)
+            }
+            .sortedWith(compareBy(nullsLast()) { it.seasonNumber })
+
+        // Compte les épisodes de chaque saison (episodes.js, en parallèle)
+        val counts = coroutineScope {
+            byName.map { s ->
+                async(Dispatchers.IO) {
+                    s to s.paths.mapNotNull { p -> runCatching { countEpisodes("$mainUrl/catalogue/$slug/$p/") }.getOrNull() }.maxOrNull()
+                }
+            }.awaitAll()
+        }
+
+        val subbed = mutableListOf<Episode>()
+        val dubbed = mutableListOf<Episode>()
+        counts.forEach { (season, count) ->
+            val n = count ?: 1
+            val sn = season.seasonNumber
+            season.paths.forEach { path ->
+                val isVf = path.trimEnd('/').endsWith("/vf")
+                val list = if (isVf) dubbed else subbed
+                val base = Regex("""(?:saison|season)\s*(\d+)""", RegexOption.IGNORE_CASE).find(season.name)?.groupValues?.get(1)?.toIntOrNull()
+                    ?: season.name
+                for (ep in 1..n) {
+                    list += newEpisode(episodeDataUrl(slug, path, ep)) {
+                        this.season = sn
+                        this.episode = ep
+                        this.name = if (season.name.isNotBlank() && !season.name.startsWith("Saison", true) && !season.name.startsWith("Season", true))
+                            "${season.name} · Épisode $ep" else null
+                    }
+                }
+            }
+        }
+
+        val isMovie = byName.size == 1 && byName[0].seasonNumber == null &&
+            (byName[0].name.contains("film", true) || byName[0].name.contains("oav", true) || byName[0].name.contains("movie", true))
+
+        return newAnimeLoadResponse(title, url, if (isMovie) TvType.AnimeMovie else TvType.Anime) {
+            this.posterUrl = poster
+            this.plot = plot
+            this.showStatus = ShowStatus.Ongoing
+            val byDub = mutableMapOf<DubStatus, List<Episode>>()
+            if (subbed.isNotEmpty()) byDub[DubStatus.Subbed] = subbed
+            if (dubbed.isNotEmpty()) byDub[DubStatus.Dubbed] = dubbed
+            this.episodes = byDub.toMutableMap()
+        }
+    }
+
+    private fun episodeDataUrl(slug: String, seasonPath: String, ep: Int): String =
+        mainUrl + "/e?slug=" + java.net.URLEncoder.encode(slug, "UTF-8") +
+            "&p=" + java.net.URLEncoder.encode(seasonPath, "UTF-8") + "&n=$ep"
+
+    /** Nombre d'épisodes d'une page saison (via episodes.js). */
+    private suspend fun countEpisodes(seasonUrl: String): Int? {
+        val html = runCatching {
+            app.get(seasonUrl, headers = baseHeaders).text
+        }.getOrNull() ?: return null
+        return fetchEpsArrays(seasonUrl, html).maxOfOrNull { it.value.size }
+    }
+
+    /** episodes.js de la page saison → {epsN → [urls]} */
+    private suspend fun fetchEpsArrays(seasonUrl: String, html: String): Map<String, List<String>> {
+        val m = Regex("""src=['"]([^'"]*episodes\.js[^'"]*)['"]""").find(html) ?: return emptyMap()
+        val src = m.groupValues[1]
+        val jsUrl = when {
+            src.startsWith("http") -> src
+            src.startsWith("/") -> currentUrl() + src
+            else -> seasonUrl.trimEnd('/') + "/" + src
+        }
+        val js = runCatching {
+            app.get(jsUrl, headers = baseHeaders, referer = seasonUrl).text
+        }.getOrNull() ?: return emptyMap()
+        val out = mutableMapOf<String, List<String>>()
+        Regex("""var\s+(eps\d+)\s*=\s*\[(.*?)\];""", RegexOption.DOT_MATCHES_ALL).findAll(js).forEach { em ->
+            val urls = Regex("""['"]([^'"]+)['"]""").findAll(em.groupValues[2]).map { it.groupValues[1] }.toList()
+            if (urls.isNotEmpty()) out[em.groupValues[1]] = urls
+        }
+        return out
+    }
+
+    // -------------------------------------------------------------------------
+    // Lecture
+    // -------------------------------------------------------------------------
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        syncUrl()
+        val params = parseParams(data.substringAfter("?", ""))
+        val slug = params["slug"] ?: return false
+        val path = params["p"] ?: return false
+        val ep = params["n"]?.toIntOrNull() ?: 1
+
+        val seasonUrl = "$mainUrl/catalogue/$slug/${path.trim('/')}/"
+        val html = runCatching {
+            app.get(seasonUrl, headers = baseHeaders).text
+        }.getOrNull() ?: return false
+        val arrays = fetchEpsArrays(seasonUrl, html)
+        if (arrays.isEmpty()) return false
+
+        // miroirs de l'épisode : eps1[i], eps2[i]… (index 0-based)
+        val mirrors = arrays.entries
+            .sortedBy { it.key.substringAfter("eps").toIntOrNull() ?: 0 }
+            .mapNotNull { (_, urls) -> urls.getOrNull(ep - 1) }
+            .filter { it.startsWith("http") }
+            .distinct()
+        if (mirrors.isEmpty()) return false
+
+        var found = false
+        val lock = Any()
+        val doctorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val doctorJobs = java.util.concurrent.CopyOnWriteArrayList<Job>()
+        val seenUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        fun emit(link: ExtractorLink) {
+            synchronized(seenUrls) { if (seenUrls.contains(link.url)) return }
+            seenUrls.add(link.url)
+            doctorJobs += doctorScope.launch {
+                if (isPlayableBlocking(link)) {
+                    synchronized(lock) {
+                        found = true
+                        callback(link)
+                    }
+                }
+            }
+        }
+
+        val semaphore = Semaphore(6)
+        coroutineScope {
+            mirrors.map { u ->
+                async(Dispatchers.IO) {
+                    semaphore.acquire()
+                    try {
+                        val label = "AnimeSama · " + labelFromUrl(u)
+                        if (directStreamRegex.matches(u)) {
+                            emit(
+                                newExtractorLink(label, label, u) {
+                                    this.referer = mainUrl
+                                    this.quality = Qualities.Unknown.value
+                                    this.type = if (".m3u8" in u) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                                }
+                            )
+                            return@async
+                        }
+                        var produced = 0
+                        runCatching {
+                            loadExtractor(u, mainUrl, { sub -> synchronized(lock) { subtitleCallback(sub) } }) { link ->
+                                produced++
+                                emit(relabel(link, label))
+                            }
+                        }
+                        if (produced == 0) {
+                            runCatching {
+                                genericExtract(u, label, { sub -> synchronized(lock) { subtitleCallback(sub) } }) { link -> emit(link) }
+                            }
+                        }
+                    } finally {
+                        semaphore.release()
+                    }
+                }
+            }.awaitAll()
+        }
+
+        doctorJobs.forEach { it.join() }
+        doctorScope.cancel()
+        return found
+    }
+
+    private fun labelFromUrl(url: String): String {
+        val u = url.lowercase()
+        return when {
+            "ansembed" in u -> "AnsEmbed"
+            "sibnet" in u -> "Sibnet"
+            "vidmoly" in u -> "VidMoly"
+            "sendvid" in u -> "SendVid"
+            "uqload" in u -> "Uqload"
+            "filemoon" in u -> "FileMoon"
+            "dood" in u -> "Dood"
+            "streamtape" in u -> "Streamtape"
+            "voe" in u -> "Voe"
+            else -> Regex("^https?://([^/]+)").find(url)?.groupValues?.get(1)?.removePrefix("www.") ?: "Lecteur"
+        }
+    }
+
+    /** Paramètres de l'URL de données (?slug=…&p=…&n=…). */
+    private fun parseParams(query: String): Map<String, String> {
+        if (query.isBlank()) return emptyMap()
+        return Regex("""(?:^|&)([a-z]+)=([^&]*)""")
+            .findAll(query)
+            .associate {
+                it.groupValues[1] to runCatching {
+                    java.net.URLDecoder.decode(it.groupValues[2], "UTF-8")
+                }.getOrDefault(it.groupValues[2])
+            }
+    }
+
+    // -------------------------------------------------------------------------
+    // Docteur de liens (identique aux autres extensions du dépôt)
+    // -------------------------------------------------------------------------
+    private val doctorClient by lazy {
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
+
+    private fun isPlayableBlocking(link: ExtractorLink): Boolean = try {
+        val builder = okhttp3.Request.Builder().url(link.url).header("Range", "bytes=0-1023")
+        val headers = (link.headers ?: emptyMap()).toMutableMap()
+        if (!headers.containsKey("User-Agent")) headers["User-Agent"] = USER_AGENT
+        if (link.referer.isNotBlank() && !headers.containsKey("Referer")) headers["Referer"] = link.referer
+        headers.forEach { (k, v) -> builder.header(k, v) }
+        doctorClient.newCall(builder.build()).execute().use { res ->
+            if (!res.isSuccessful) {
+                val code = res.code
+                return@use code == 403 || code == 416 || code == 429
+            }
+            val body = res.body ?: return@use false
+            val head = ByteArray(512)
+            var n = 0
+            while (n < 512) {
+                val read = body.byteStream().read(head, n, 512 - n)
+                if (read <= 0) break
+                n += read
+            }
+            if (n <= 0) return@use false
+            val contentType = (res.header("Content-Type") ?: "").lowercase()
+            val prefix = String(head, 0, n, Charsets.ISO_8859_1)
+            val isFtyp = n >= 12 && head[4] == 'f'.code.toByte() && head[5] == 't'.code.toByte() &&
+                head[6] == 'y'.code.toByte() && head[7] == 'p'.code.toByte()
+            val isEbml = n >= 4 && (head[0].toInt() and 0xFF) == 0x1A && (head[1].toInt() and 0xFF) == 0x45 &&
+                (head[2].toInt() and 0xFF) == 0xDF && (head[3].toInt() and 0xFF) == 0xA3
+            val isTs = (head[0].toInt() and 0xFF) == 0x47
+            val isFlv = prefix.startsWith("FLV") || prefix.startsWith("OggS") || prefix.startsWith("ID3")
+            val isMp3Sync = n >= 2 && (head[0].toInt() and 0xFF) == 0xFF && (head[1].toInt() and 0xE0) == 0xE0
+            when {
+                link.type == ExtractorLinkType.DASH || ".mpd" in link.url ->
+                    prefix.contains("<MPD") || prefix.contains("<?xml")
+                link.type == ExtractorLinkType.M3U8 || ".m3u8" in link.url || contentType.contains("mpegurl") ->
+                    prefix.contains("#EXTM3U") || contentType.contains("mpegurl")
+                contentType.startsWith("video/") || contentType.startsWith("audio/") -> true
+                prefix.contains("#EXTM3U") -> true
+                isFtyp || isEbml || isTs || isFlv || isMp3Sync || prefix.startsWith("RIFF") -> true
+                else -> false
+            }
+        }
+    } catch (e: Exception) {
+        true
+    }
+
+    private fun relabel(link: ExtractorLink, label: String): ExtractorLink {
+        return ExtractorLink(
+            link.source, label, link.url, link.referer, link.quality,
+            link.headers, link.extractorData, link.type, link.audioTracks
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // Fallback générique
+    // -------------------------------------------------------------------------
+    private suspend fun genericExtract(
+        embedUrl: String,
+        label: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean = runCatching {
+        val page = app.get(embedUrl, referer = mainUrl, headers = mapOf("user-agent" to USER_AGENT)).text
+
+        val links = LinkedHashSet<String>()
+        Regex("""(?:og:video(?::secure_url)?|contentUrl|embedUrl)"?\s*(?:content|=|:)\s*["']([^"']+)["']""")
+            .findAll(page).map { it.groupValues[1] }.forEach { links.add(it) }
+        Regex("""<(?:source|video)[^>]+src=["']([^"']+)["']""")
+            .findAll(page).map { it.groupValues[1] }.forEach { links.add(it) }
+        Regex("""(?:file|src|url|source)\s*[=:]\s*["'](https?://[^"']+)["']""")
+            .findAll(page).map { it.groupValues[1] }.forEach { links.add(it) }
+        directStreamRegex.findAll(page).map { it.value }.forEach { links.add(it) }
+        if (links.isEmpty()) {
+            runCatching { JsUnpacker(page).takeIf { it.detect() }?.unpack() }.getOrNull()?.let { unpacked ->
+                Regex("""(?:file|src)\s*[=:]\s*["'](https?://[^"']+)["']""")
+                    .findAll(unpacked).map { it.groupValues[1] }.forEach { links.add(it) }
+                directStreamRegex.findAll(unpacked).map { it.value }.forEach { links.add(it) }
+            }
+        }
+        Regex("""\}\("([A-Za-z0-9+/=]{40,})"\)""").findAll(page).forEach { m ->
+            val host = Regex("""^https?://([^/]+)""").find(embedUrl)?.groupValues?.get(1) ?: return@forEach
+            decodeXorSource(m.groupValues[1], host)?.let { links.add(it) }
+        }
+
+        links.asSequence()
+            .filter { it.startsWith("http") }
+            .map { it.replace("&amp;", "&") }
+            .filter { link -> junkFilterRegex.containsMatchIn(link).not() }
+            .filter { it.endsWith(".m3u8") || it.endsWith(".mp4") || it.endsWith(".webm") || directStreamRegex.matches(it) }
+            .distinct()
+            .forEach { link ->
+                callback(
+                    newExtractorLink(label, label, link) {
+                        this.referer = embedUrl
+                        this.quality = Qualities.Unknown.value
+                        this.type = if (link.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    }
+                )
+            }
+
+        links.isNotEmpty()
+    }.getOrDefault(false)
+
+    private fun decodeXorSource(b64: String, hostname: String): String? = runCatching {
+        val h = hostname.sumOf { it.code } and 0xFF
+        val a = android.util.Base64.decode(b64, android.util.Base64.DEFAULT).reversed()
+        val out = StringBuilder()
+        for (i in a.indices) {
+            val kk = (0x3d + i * 89 + h) and 0xFF
+            out.append(((a[i].toInt() and 0xFF) xor kk).toChar())
+        }
+        out.toString().takeIf { it.startsWith("http") }
+    }.getOrNull()
+
+    private val directStreamRegex = Regex("""https?://[^"'\\\s<>]+\.(?:m3u8|mp4|webm)[^"'\\\s<>]*""")
+
+    private val junkFilterRegex = Regex(
+        """(?i)(youtube|youtu\.be|dailymotion|\.jpg|\.jpeg|\.png|\.gif|\.webp|\.svg|\.vtt|\.srt|""" +
+            """/ads?/|adserve|adservice|adsystem|doubleclick|banner|/pixel|analytics|/thumb|poster|trailer)"""
+    )
+}
