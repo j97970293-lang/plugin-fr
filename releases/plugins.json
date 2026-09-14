@@ -44,6 +44,28 @@
   "name": "AnimoFlixProvider"
  },
  {
+  "iconUrl": "https://www.google.com/s2/favicons?domain=franime.fr&sz=%size%",
+  "fileHash": "sha256-98c2f5e57a979228e863bc1d8f47ac324cb6313015917de043132dfcade673e8",
+  "apiVersion": 1,
+  "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+  "fileSize": 54028,
+  "status": 1,
+  "language": "fr",
+  "authors": [
+   "ArenaAgent"
+  ],
+  "tvTypes": [
+   "Anime",
+   "AnimeMovie",
+   "OVA"
+  ],
+  "version": 1,
+  "internalName": "FranimeProvider",
+  "description": "FRAnime — Animes VF/VOSTFR, films & OAV (lecteurs Sibnet, VidMoly, FileMoon, SendVid, Uqload…)",
+  "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/FranimeProvider.cs3",
+  "name": "FranimeProvider"
+ },
+ {
   "iconUrl": "https://www.google.com/s2/favicons?domain=wavewatch.top&sz=%size%",
   "fileHash": "sha256-74b8e7f0d8a7f2bf0ad69275ede97dffeac28e3fd719c939a4a75bea4850127c",
   "apiVersion": 1,

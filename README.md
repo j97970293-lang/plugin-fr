@@ -1,6 +1,6 @@
 # Plugin fr · Dépôt d'extensions CloudStream (`.cs3`)
 
-Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **quatre extensions** :
+Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **cinq extensions** :
 
 | Extension | Site | Contenu |
 |---|---|---|
@@ -8,6 +8,22 @@ Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream)
 | **ZenixProvider** | [zenix.best](https://zenix.best/) (secours : zenix.lol) | films & séries en VF / VOSTFR |
 | **WaveWatchProvider** | [wavewatch.top](https://wavewatch.top/) | films, séries, animes & **TV en direct** en VF / VOSTFR |
 | **AfterdarkProvider** | [afd926.mom](https://afd926.mom/) (miroir de afterdark.best) | films & séries en **VOSTFR** (multi-serveurs) |
+| **FranimeProvider** | [franime.fr](https://franime.fr/) | **animes en VF & VOSTFR** (saisons, films) — lecteurs Sibnet, VidMoly, FileMoon… |
+
+
+## 🆕 Nouveauté du 14 septembre — FRAnime v1 (animes VF/VOSTFR)
+
+Nouvelle extension pour **[franime.fr](https://franime.fr/)** — le catalogue d'animes FR de référence :
+
+| Caractéristique | Détail |
+|---|---|
+| **Catalogue & recherche** | listes **Tendances, En cours, Populaires, Mieux notés, Films** via l'API publique **Kitsu** (les mêmes fiches que FRanime) — le lourd catalogue du site (11 Mo) n'est jamais téléchargé |
+| **VF + VOSTFR** | chaque épisode sonde automatiquement les lecteurs **VOSTFR puis VF** (Sibnet, VidMoly, SendVid, FileMoon, Uqload, Streamtape, Dood, VK…) |
+| **Saisons & films** | séries multi-saisons avec miniatures par épisode, détection automatique des films |
+| **Anti-blocage** | challenge **Cloudflare** résolu sur l'appareil + décodage du jeton `watch2` du lecteur (chiffré) + détection des lecteurs leurres |
+| **Qualité** | liens étiquetés « Sibnet · VOSTFR », vérifiés jouables avant affichage (docteur de liens) |
+
+> ℹ️ **FRanime n'indexe pas tous les animes de Kitsu** : si une fiche n'est pas sur le site, l'extension l'indique clairement (« pas disponible sur FRAnime »).
 
 
 ## 🚀 Mise à jour du 14 septembre (nuit) — plus de serveurs (AnimoFlix v5, Zenix v5, WaveWatch v4, Afterdark v4)
@@ -283,11 +299,62 @@ Extension pour **[afd926.mom](https://afd926.mom/)** (miroir actif de `afterdark
 |---|---|---|
 | Afterdark v4 | [AfterdarkProvider.cs3](releases/AfterdarkProvider.cs3) | [AfterdarkProvider.cs3](https://x0.at/9jiS.cs3) |
 | AnimoFlix v5 | [AnimoFlixProvider.cs3](releases/AnimoFlixProvider.cs3) | [AnimoFlixProvider.cs3](https://x0.at/jw4w.cs3) |
+| Franime v1 | [FranimeProvider.cs3](releases/FranimeProvider.cs3) | [FranimeProvider.cs3](https://x0.at/rWQ4.cs3) |
 | WaveWatch v4 | [WaveWatchProvider.cs3](releases/WaveWatchProvider.cs3) | [WaveWatchProvider.cs3](https://x0.at/SjF7.cs3) |
 | Zenix v5 | [ZenixProvider.cs3](releases/ZenixProvider.cs3) | [ZenixProvider.cs3](https://x0.at/KMnW.cs3) |
 
 | Dépôt (repo.json) | Liste d'extensions (plugins.json) |
 |---|---|
-| https://x0.at/Zlel.json | https://x0.at/snlN.json |
+| https://x0.at/oWUU.json | https://x0.at/1e0V.json |
 
-> ⚠️ Miroirs du 14/09 (soir) — les derniers en date (correctif 3003). Les précédents (`PEvE`/`hkF6`…) resteront accessibles mais ne servent plus les nouvelles versions : remplacez l'URL du dépôt par celle ci-dessus, ou mettez simplement à jour chaque extension.
+> ⚠️ Miroirs du 14/09 (nuit, FRAnime inclus) — les plus récents. Les précédents (`Zlel`/`snlN`, `PEvE`/`hkF6`…) resteront accessibles mais ne servent pas la nouvelle extension : remplacez l'URL du dépôt par celle ci-dessus, ou mettez simplement à jour chaque extension.
+
+---
+
+# FRAnime · Extension CloudStream (`.cs3`)
+
+> **v1** : extension pour **[franime.fr](https://franime.fr/)** — animes en **VF & VOSTFR** : catalogue Kitsu (tendances, en cours, populaires, mieux notés, films), saisons avec miniatures, films détectés automatiquement, lecteurs multiples (Sibnet, VidMoly, SendVid, FileMoon, Uqload, Streamtape, Dood, VK…), décodage du jeton chiffré `watch2`, anti-leurres, docteur de liens.
+
+Extension pour **[franime.fr](https://franime.fr/)** — le catalogue d'animes français de référence, en **VF & VOSTFR**.
+
+## ✨ Fonctionnalités
+
+- **Catalogue & recherche via Kitsu** : FRanime indexe les fiches **Kitsu** (IDs identiques). L'extension interroge l'API publique `kitsu.io` pour les listes (Tendances, En cours de diffusion, Populaires, Mieux notés, Films d'animation) et la recherche — **le catalogue complet du site (~11 Mo) n'est jamais téléchargé**, les fiches s'ouvrent en ~100 Ko.
+- **Fiches riches** : synopsis, affiche, fond, note, année, statut (en cours/terminé), titres alternatifs — tout vient de Kitsu, en français côté CloudStream.
+- **Saisons & épisodes** : structure complète multi-saisons avec numéros, titres et **miniatures** par épisode ; **films détectés automatiquement** (fiche « film » au lieu d'une liste d'épisodes).
+- **Lecture — VF + VOSTFR, plusieurs lecteurs** : pour chaque épisode, l'extension sonde les lecteurs **VOSTFR puis VF** (jusqu'à 5 par langue) et affiche tous ceux qui répondent, étiquetés « **Sibnet · VOSTFR** », « **VidMoly · VF** »…
+- **Décodage `watch2`** : l'API lecteur renvoie une URL chiffrée (`base64 → hex → XOR`) — l'extension la déchiffre automatiquement (clé trouvée par essais, format validé).
+- **Anti-leurres** : le site sert parfois un embed générique aux clients non-navigateur — liste noire intégrée + détection par doublons (deux lecteurs qui résolvent le même embed = leurre → langue ignorée).
+- **Cloudflare** : le challenge du site et de son API est résolu sur l'appareil (WebView intégrée à CloudStream) — aucune manipulation.
+- **Docteur de liens** : chaque flux est vérifié jouable (HLS/MP4/WebM/TS/DASH) avant affichage — pas d'erreur 3003.
+- **Bouton « Réglages »** : changez l'adresse du site si franime.fr déménage (l'API suit automatiquement : `api.<domaine>`).
+
+## 📥 Installation
+
+Méthode habituelle : ajoutez le dépôt (voir [Méthode 1](#-installation) plus haut) puis installez **FranimeProvider** — ou directement :
+
+| Extension | Fichier | Miroir x0.at |
+|---|---|---|
+| Franime v1 | [FranimeProvider.cs3](releases/FranimeProvider.cs3) | [FranimeProvider.cs3](https://x0.at/rWQ4.cs3) |
+
+| Dépôt (repo.json) | Liste d'extensions (plugins.json) |
+|---|---|
+| https://x0.at/oWUU.json | https://x0.at/1e0V.json |
+
+## ⚠️ Notes techniques
+
+- **Kitsu ≠ FRanime** : les listes montrent tout Kitsu ; si un titre n'est pas sur FRanime, la fiche l'indique (« Cet anime n'est pas disponible sur FRAnime »). Cherchez un titre voisin — le catalogue FRanime est très large (plusieurs milliers de fiches).
+- **Indice des lecteurs** : l'API lecteur prend l'index 0-based du lecteur (convention vérifiée sur 4 implémentations indépendantes) — l'extension sonde 0–4 et ignore les réponses vides.
+- **VOSTFR d'abord**, VF ensuite — même logique que les autres extensions du dépôt.
+
+## 🔨 Compiler soi-même
+
+```bash
+git clone https://github.com/j97970293-lang/plugin-fr
+cd plugin-fr
+./gradlew :FranimeProvider:make   # → FranimeProvider/build/FranimeProvider.cs3
+```
+
+---
+
+Projet à but éducatif. CloudStream et cette extension ne hébergent aucun contenu : elles indexent uniquement un site public. Utilisez-la conformément aux lois applicables dans votre pays.
