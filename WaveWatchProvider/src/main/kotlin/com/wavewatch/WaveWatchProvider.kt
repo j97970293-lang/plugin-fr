@@ -38,6 +38,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import java.net.URLEncoder
 
 /**
@@ -52,6 +57,8 @@ class WaveWatchPlugin : Plugin() {
         registerExtractorAPI(OneEmbed())
         // ansembed.net (JWPlayer) — hébergeur du secours anime AnimoFlix
         registerExtractorAPI(AnsEmbed())
+        // vidara.to — évite l'extracteur intégré qui marque tout en HLS (erreurs 3003)
+        registerExtractorAPI(Vidara())
         // Bouton « Réglages » sur la fiche de l'extension dans CloudStream
         openSettings = { ctx -> WaveWatchProvider.showSettings(ctx) }
     }
@@ -127,6 +134,55 @@ class OneEmbed : ExtractorApi() {
 
     companion object {
         private val baseHeaders = mapOf("user-agent" to USER_AGENT)
+    }
+}
+
+/**
+ * vidara.to — hébergeur type Vidmoly (liens apiwiflix/zeus, affiché « Vidara »).
+ * L'extracteur intégré de CloudStream marque TOUT en HLS sans vérifier : quand le
+ * fichier est un MP4 ou un lien mort, le lecteur plante avec l'erreur 3003
+ * « container unsupported ». Ici on interroge /api/stream (POST JSON) et on ne
+ * marque HLS que si l'URL est vraiment un .m3u8 ; parse défensif (regex) car
+ * « subtitles » peut valoir la chaîne "None" et faire planter un parseur strict.
+ */
+class Vidara : ExtractorApi() {
+    override val name = "Vidara"
+    override val mainUrl = "https://vidara.to"
+    override val requiresReferer = false
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val fileCode = url.substringAfterLast("/").substringBefore("?")
+        val res = runCatching {
+            app.post(
+                "$mainUrl/api/stream",
+                json = mapOf("filecode" to fileCode, "device" to "web"),
+                referer = mainUrl
+            ).text
+        }.getOrNull() ?: return
+        val stream = Regex("\"streaming_url\"\\s*:\\s*\"([^\"]+)\"")
+            .find(res)?.groupValues?.get(1)?.replace("\\/", "/") ?: return
+        if (!stream.startsWith("http")) return
+        callback(
+            newExtractorLink(name, name, stream) {
+                this.type = if (".m3u8" in stream) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                this.referer = mainUrl
+            }
+        )
+        // Sous-titres : le champ vaut parfois la chaîne "None" — on ne parse que les vrais tableaux
+        val arr = Regex("\"subtitles\"\\s*:\\s*\\[(.*?)\\]", RegexOption.DOT_MATCHES_ALL)
+            .find(res)?.groupValues?.get(1) ?: return
+        val paths = Regex("\"file_path\"\\s*:\\s*\"([^\"]+)\"").findAll(arr)
+            .map { it.groupValues[1].replace("\\/", "/") }.toList()
+        val langs = Regex("\"language\"\\s*:\\s*\"([^\"]+)\"").findAll(arr)
+            .map { it.groupValues[1] }.toList()
+        paths.zip(langs).forEach { (path, lang) ->
+            subtitleCallback(SubtitleFile(lang, path))
+        }
     }
 }
 
@@ -523,9 +579,21 @@ class WaveWatchProvider : MainAPI() {
 
         var found = false
         val lock = Any()
-        fun emit(link: ExtractorLink) = synchronized(lock) {
-            found = true
-            callback(link)
+        val doctorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val doctorJobs = java.util.concurrent.CopyOnWriteArrayList<Job>()
+        val seenUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        /** N'émet un lien qu'une fois vérifié jouable (anti-erreurs 3003). */
+        fun emit(link: ExtractorLink) {
+            synchronized(seenUrls) { if (seenUrls.contains(link.url)) return }
+            seenUrls.add(link.url)
+            doctorJobs += doctorScope.launch {
+                if (isPlayableBlocking(link)) {
+                    synchronized(lock) {
+                        found = true
+                        callback(link)
+                    }
+                }
+            }
         }
 
         val hostLinks = LinkedHashMap<String, HostLink>()
@@ -639,13 +707,26 @@ class WaveWatchProvider : MainAPI() {
                         semaphore.acquire()
                         try {
                             var produced = 0
-                            runCatching {
-                                loadExtractor(hl.url, mainUrl, { sub ->
-                                    synchronized(lock) { subtitleCallback(sub) }
-                                }, { link ->
-                                    produced++
-                                    emit(relabel(link, hl.lang))
-                                })
+                            if ("vidara.to" in hl.url) {
+                                // L'extracteur intégré marque tout en HLS → erreurs 3003 ;
+                                // le nôtre vérifie le vrai type de fichier
+                                runCatching {
+                                    Vidara().getUrl(hl.url, mainUrl, { sub ->
+                                        synchronized(lock) { subtitleCallback(sub) }
+                                    }) { link ->
+                                        produced++
+                                        emit(relabel(link, hl.lang))
+                                    }
+                                }
+                            } else {
+                                runCatching {
+                                    loadExtractor(hl.url, mainUrl, { sub ->
+                                        synchronized(lock) { subtitleCallback(sub) }
+                                    }, { link ->
+                                        produced++
+                                        emit(relabel(link, hl.lang))
+                                    })
+                                }
                             }
                             // Secours générique si l'extracteur n'a rien donné
                             if (produced == 0) {
@@ -665,6 +746,8 @@ class WaveWatchProvider : MainAPI() {
             }
         }
 
+        doctorJobs.forEach { it.join() }
+        doctorScope.cancel()
         return found
     }
 
@@ -779,6 +862,58 @@ class WaveWatchProvider : MainAPI() {
     }
 
     private fun outHasLang(list: List<HostLink>, lang: String) = list.any { it.lang == lang }
+
+    // -------------------------------------------------------------------------
+    // Docteur de liens : chaque lien est VÉRIFIÉ jouable avant d'être affiché
+    // (petite requête Range) — élimine les erreurs ExoPlayer 3003 « container
+    // unsupported » des liens morts, des pages HTML et des fichiers mal typés.
+    // En cas de doute (timeout, réseau), le lien est conservé.
+    // -------------------------------------------------------------------------
+    private val doctorClient by lazy {
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
+
+    private fun isPlayableBlocking(link: ExtractorLink): Boolean = try {
+        val builder = okhttp3.Request.Builder().url(link.url).header("Range", "bytes=0-1023")
+        val headers = (link.headers ?: emptyMap()).toMutableMap()
+        if (!headers.containsKey("User-Agent")) headers["User-Agent"] = USER_AGENT
+        if (link.referer.isNotBlank() && !headers.containsKey("Referer")) headers["Referer"] = link.referer
+        headers.forEach { (k, v) -> builder.header(k, v) }
+        doctorClient.newCall(builder.build()).execute().use { res ->
+            if (!res.isSuccessful) return@use false
+            val body = res.body ?: return@use false
+            val head = ByteArray(512)
+            var n = 0
+            while (n < 512) {
+                val read = body.byteStream().read(head, n, 512 - n)
+                if (read <= 0) break
+                n += read
+            }
+            if (n <= 0) return@use false
+            val contentType = (res.header("Content-Type") ?: "").lowercase()
+            val prefix = String(head, 0, n, Charsets.ISO_8859_1)
+            val isFtyp = n >= 12 && head[4] == 'f'.code.toByte() && head[5] == 't'.code.toByte() &&
+                head[6] == 'y'.code.toByte() && head[7] == 'p'.code.toByte()
+            val isEbml = n >= 4 && (head[0].toInt() and 0xFF) == 0x1A && (head[1].toInt() and 0xFF) == 0x45 &&
+                (head[2].toInt() and 0xFF) == 0xDF && (head[3].toInt() and 0xFF) == 0xA3
+            val isTs = (head[0].toInt() and 0xFF) == 0x47
+            when {
+                link.type == ExtractorLinkType.DASH || ".mpd" in link.url ->
+                    prefix.contains("<MPD") || prefix.contains("<?xml")
+                link.type == ExtractorLinkType.M3U8 || ".m3u8" in link.url || contentType.contains("mpegurl") ->
+                    prefix.contains("#EXTM3U") || contentType.contains("mpegurl")
+                contentType.startsWith("video/") || contentType.startsWith("audio/") -> true
+                prefix.contains("#EXTM3U") -> true
+                isFtyp || isEbml || isTs || prefix.startsWith("RIFF") -> true
+                else -> false
+            }
+        }
+    } catch (e: Exception) {
+        true // doute réseau → on garde le lien
+    }
 
     /** Ré-étiquette un lien avec sa langue (« Filemoon · VF ») pour l'utilisateur. */
     private fun relabel(link: ExtractorLink, lang: String?): ExtractorLink {

@@ -1,90 +1,90 @@
 [
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=afd926.mom&sz=%size%",
-        "fileHash": "sha256-6cc741ba65681add64f79d52f0b08ecfe34458f95b147a27dcd8c8c0c8777bc4",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-        "fileSize": 82841,
-        "status": 1,
-        "language": "fr",
-        "authors": [
-            "ArenaAgent"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 2,
-        "internalName": "AfterdarkProvider",
-        "description": "Afterdark — Films et séries en VOSTFR (multi-serveurs)",
-        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AfterdarkProvider.cs3",
-        "name": "AfterdarkProvider"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=animoflix.to&sz=%size%",
-        "fileHash": "sha256-ba5d3cbcbf583865a7bcf6d9737489d05af56d5d78fa7b783799aa9d07c1370e",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-        "fileSize": 45336,
-        "status": 1,
-        "language": "fr",
-        "authors": [
-            "ArenaAgent"
-        ],
-        "tvTypes": [
-            "Anime",
-            "AnimeMovie",
-            "OVA",
-            "Cartoon"
-        ],
-        "version": 3,
-        "internalName": "AnimoFlixProvider",
-        "description": "AnimoFlix — Animes, films & OAV en VF/VOSTFR",
-        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimoFlixProvider.cs3",
-        "name": "AnimoFlixProvider"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=wavewatch.top&sz=%size%",
-        "fileHash": "sha256-fcfb91ae42a94ca2f7765548e9a0abca9c46409b4f9b57910f92cf561ef254b1",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-        "fileSize": 91813,
-        "status": 1,
-        "language": "fr",
-        "authors": [
-            "ArenaAgent"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries",
-            "Anime",
-            "Live"
-        ],
-        "version": 2,
-        "internalName": "WaveWatchProvider",
-        "description": "WaveWatch — Films, séries, animes & TV en direct (VF/VOSTFR)",
-        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/WaveWatchProvider.cs3",
-        "name": "WaveWatchProvider"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=zenix.best&sz=%size%",
-        "fileHash": "sha256-19195e5eb099a6a48f37dce66b505fb2cdeeacdaed1b4b0df45de62f03f19604",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-        "fileSize": 72627,
-        "status": 1,
-        "language": "fr",
-        "authors": [
-            "ArenaAgent"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 3,
-        "internalName": "ZenixProvider",
-        "description": "Zenix — Films et séries en VF/VOSTFR",
-        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/ZenixProvider.cs3",
-        "name": "ZenixProvider"
-    }
+ {
+  "iconUrl": "https://www.google.com/s2/favicons?domain=afd926.mom&sz=%size%",
+  "fileHash": "sha256-bd4c9e770afd912bbe3ee34657e89ae922f617b18cad9890e8c120b5d6b45277",
+  "apiVersion": 1,
+  "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+  "fileSize": 90826,
+  "status": 1,
+  "language": "fr",
+  "authors": [
+   "ArenaAgent"
+  ],
+  "tvTypes": [
+   "Movie",
+   "TvSeries"
+  ],
+  "version": 3,
+  "internalName": "AfterdarkProvider",
+  "description": "Afterdark — Films et séries en VOSTFR (multi-serveurs)",
+  "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AfterdarkProvider.cs3",
+  "name": "AfterdarkProvider"
+ },
+ {
+  "iconUrl": "https://www.google.com/s2/favicons?domain=animoflix.to&sz=%size%",
+  "fileHash": "sha256-8c6d753fca4e5b20e3cb28bf03fc80c5218135298cb92e5c353ae2c4bb2b8076",
+  "apiVersion": 1,
+  "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+  "fileSize": 51850,
+  "status": 1,
+  "language": "fr",
+  "authors": [
+   "ArenaAgent"
+  ],
+  "tvTypes": [
+   "Anime",
+   "AnimeMovie",
+   "OVA",
+   "Cartoon"
+  ],
+  "version": 4,
+  "internalName": "AnimoFlixProvider",
+  "description": "AnimoFlix — Animes, films & OAV en VF/VOSTFR",
+  "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimoFlixProvider.cs3",
+  "name": "AnimoFlixProvider"
+ },
+ {
+  "iconUrl": "https://www.google.com/s2/favicons?domain=wavewatch.top&sz=%size%",
+  "fileHash": "sha256-78fe4af278675d69cae2226a505c896a7e3524f6fd4c9aac2137f4ddce4a5892",
+  "apiVersion": 1,
+  "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+  "fileSize": 99406,
+  "status": 1,
+  "language": "fr",
+  "authors": [
+   "ArenaAgent"
+  ],
+  "tvTypes": [
+   "Movie",
+   "TvSeries",
+   "Anime",
+   "Live"
+  ],
+  "version": 3,
+  "internalName": "WaveWatchProvider",
+  "description": "WaveWatch — Films, séries, animes & TV en direct (VF/VOSTFR)",
+  "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/WaveWatchProvider.cs3",
+  "name": "WaveWatchProvider"
+ },
+ {
+  "iconUrl": "https://www.google.com/s2/favicons?domain=zenix.best&sz=%size%",
+  "fileHash": "sha256-0a7dfdc5a0d09577ecac269d044365345cb9bb1259b05ccf4440492b8cddc9b6",
+  "apiVersion": 1,
+  "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+  "fileSize": 81040,
+  "status": 1,
+  "language": "fr",
+  "authors": [
+   "ArenaAgent"
+  ],
+  "tvTypes": [
+   "Movie",
+   "TvSeries"
+  ],
+  "version": 4,
+  "internalName": "ZenixProvider",
+  "description": "Zenix — Films et séries en VF/VOSTFR",
+  "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/ZenixProvider.cs3",
+  "name": "ZenixProvider"
+ }
 ]
