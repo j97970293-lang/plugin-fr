@@ -1,10 +1,10 @@
 [
  {
   "iconUrl": "https://www.google.com/s2/favicons?domain=afd926.mom&sz=%size%",
-  "fileHash": "sha256-bd4c9e770afd912bbe3ee34657e89ae922f617b18cad9890e8c120b5d6b45277",
+  "fileHash": "sha256-d963f7149ab7f329145c090f9b04c1f2950d8a05fc686dbd37d049735147ce46",
   "apiVersion": 1,
   "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-  "fileSize": 90826,
+  "fileSize": 95269,
   "status": 1,
   "language": "fr",
   "authors": [
@@ -14,7 +14,7 @@
    "Movie",
    "TvSeries"
   ],
-  "version": 3,
+  "version": 4,
   "internalName": "AfterdarkProvider",
   "description": "Afterdark — Films et séries en VOSTFR (multi-serveurs)",
   "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AfterdarkProvider.cs3",
@@ -22,10 +22,10 @@
  },
  {
   "iconUrl": "https://www.google.com/s2/favicons?domain=animoflix.to&sz=%size%",
-  "fileHash": "sha256-8c6d753fca4e5b20e3cb28bf03fc80c5218135298cb92e5c353ae2c4bb2b8076",
+  "fileHash": "sha256-4f5f1065340fb0717454275ad983084965c86bd9484af862d5199cec1920de2c",
   "apiVersion": 1,
   "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-  "fileSize": 51850,
+  "fileSize": 55901,
   "status": 1,
   "language": "fr",
   "authors": [
@@ -37,7 +37,7 @@
    "OVA",
    "Cartoon"
   ],
-  "version": 4,
+  "version": 5,
   "internalName": "AnimoFlixProvider",
   "description": "AnimoFlix — Animes, films & OAV en VF/VOSTFR",
   "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimoFlixProvider.cs3",
@@ -45,10 +45,10 @@
  },
  {
   "iconUrl": "https://www.google.com/s2/favicons?domain=wavewatch.top&sz=%size%",
-  "fileHash": "sha256-78fe4af278675d69cae2226a505c896a7e3524f6fd4c9aac2137f4ddce4a5892",
+  "fileHash": "sha256-74b8e7f0d8a7f2bf0ad69275ede97dffeac28e3fd719c939a4a75bea4850127c",
   "apiVersion": 1,
   "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-  "fileSize": 99406,
+  "fileSize": 104813,
   "status": 1,
   "language": "fr",
   "authors": [
@@ -60,7 +60,7 @@
    "Anime",
    "Live"
   ],
-  "version": 3,
+  "version": 4,
   "internalName": "WaveWatchProvider",
   "description": "WaveWatch — Films, séries, animes & TV en direct (VF/VOSTFR)",
   "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/WaveWatchProvider.cs3",
@@ -68,10 +68,10 @@
  },
  {
   "iconUrl": "https://www.google.com/s2/favicons?domain=zenix.best&sz=%size%",
-  "fileHash": "sha256-0a7dfdc5a0d09577ecac269d044365345cb9bb1259b05ccf4440492b8cddc9b6",
+  "fileHash": "sha256-6ecd86a74bee855970d5e64fa2d34a618d1a241767ea5b17bc7cffe0d5d4b0d5",
   "apiVersion": 1,
   "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-  "fileSize": 81040,
+  "fileSize": 86074,
   "status": 1,
   "language": "fr",
   "authors": [
@@ -81,7 +81,7 @@
    "Movie",
    "TvSeries"
   ],
-  "version": 4,
+  "version": 5,
   "internalName": "ZenixProvider",
   "description": "Zenix — Films et séries en VF/VOSTFR",
   "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/ZenixProvider.cs3",

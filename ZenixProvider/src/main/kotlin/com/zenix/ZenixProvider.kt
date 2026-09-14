@@ -61,6 +61,8 @@ class ZenixPlugin : Plugin() {
         registerExtractorAPI(AnsEmbed())
         // vidara.to — évite l'extracteur intégré qui marque tout en HLS (erreurs 3003)
         registerExtractorAPI(Vidara())
+        // blinkflux.lol — lecteur zeus/mouve (charge chiffrée → unlock → MP4)
+        registerExtractorAPI(BlinkFlux())
         // Bouton « Réglages » sur la fiche de l'extension dans CloudStream
         openSettings = { ctx -> ZenixProvider.showSettings(ctx) }
     }
@@ -158,12 +160,15 @@ class Vidara : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
+        // Les 16 miroirs (vidaraw.com, vidaraa.cc…) partagent la même API et les
+        // mêmes filecodes : on interroge le domaine du lien lui-même.
+        val base = Regex("^(https?://[^/]+)").find(url)?.groupValues?.get(1) ?: mainUrl
         val fileCode = url.substringAfterLast("/").substringBefore("?")
         val res = runCatching {
             app.post(
-                "$mainUrl/api/stream",
+                "$base/api/stream",
                 json = mapOf("filecode" to fileCode, "device" to "web"),
-                referer = mainUrl
+                referer = base
             ).text
         }.getOrNull() ?: return
         val stream = Regex("\"streaming_url\"\\s*:\\s*\"([^\"]+)\"")
@@ -172,7 +177,7 @@ class Vidara : ExtractorApi() {
         callback(
             newExtractorLink(name, name, stream) {
                 this.type = if (".m3u8" in stream) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                this.referer = mainUrl
+                this.referer = base
             }
         )
         // Sous-titres : le champ vaut parfois la chaîne "None" — on ne parse que les vrais tableaux
@@ -185,6 +190,60 @@ class Vidara : ExtractorApi() {
         paths.zip(langs).forEach { (path, lang) ->
             subtitleCallback(SubtitleFile(lang, path))
         }
+    }
+
+    companion object {
+        /** Famille « StreamUp » : même API /api/stream et mêmes filecodes partout (vérifié). */
+        private val domains = listOf(
+            "vidara.to", "vidaraa.cc", "vidaraw.com", "vidarax.cc", "vidara.so",
+            "vidavaca.net", "vidaarax.net", "vidaarax.com", "vidaratem.com",
+            "odysseusa.cc", "handfacesnap.cc", "namefacesnap.cc", "thebesthosterv.com",
+            "vidmatrixa.com", "vidchampions.com", "antarcticadocs.com", "nameitweb.com"
+        )
+
+        fun isVidara(url: String): Boolean {
+            val host = Regex("^https?://([^/]+)").find(url)?.groupValues?.get(1)?.lowercase() ?: return false
+            return host in domains
+        }
+    }
+}
+
+/**
+ * blinkflux.lol — lecteur servi par zeus/mouve : la page embarque une charge
+ * chiffrée (ENCRYPTED_PAYLOAD/IV) qu'on renvoie à route=unlock pour obtenir
+ * l'URL directe du flux (MP4). Aucun extracteur intégré ne connaît ce lecteur.
+ */
+class BlinkFlux : ExtractorApi() {
+    override val name = "BlinkFlux"
+    override val mainUrl = "https://blinkflux.lol"
+    override val requiresReferer = true
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val key = Regex("[?&]api_key=([A-Za-z0-9_]+)").find(url)?.groupValues?.get(1) ?: return
+        val page = runCatching { app.get(url, referer = mainUrl).text }.getOrNull() ?: return
+        val payload = Regex("ENCRYPTED_PAYLOAD\\s*=\\s*\"([^\"]+)\"").find(page)?.groupValues?.get(1)?.replace("\\/", "/") ?: return
+        val iv = Regex("ENCRYPTED_IV\\s*=\\s*\"([^\"]+)\"").find(page)?.groupValues?.get(1) ?: return
+        val res = runCatching {
+            app.post(
+                "$mainUrl/api/v1/index.php?route=unlock&api_key=$key",
+                json = mapOf("token" to "", "payload" to payload, "iv" to iv),
+                referer = url,
+                headers = mapOf("Origin" to mainUrl)
+            ).text
+        }.getOrNull() ?: return
+        val stream = Regex("\"url\"\\s*:\\s*\"([^\"]+)\"").find(res)?.groupValues?.get(1)?.replace("\\/", "/") ?: return
+        if (!stream.startsWith("http")) return
+        callback(
+            newExtractorLink(name, name, stream) {
+                this.type = if (".m3u8" in stream) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                this.referer = mainUrl
+            }
+        )
     }
 }
 
@@ -628,11 +687,21 @@ class ZenixProvider : MainAPI() {
                                         produced++; emit(relabel(it, hl.lang))
                                     }
                                 }
-                            } else if ("vidara.to" in hl.url) {
+                            } else if (Vidara.isVidara(hl.url)) {
                                 // L'extracteur intégré marque tout en HLS → erreurs 3003 ;
                                 // le nôtre vérifie le vrai type de fichier
                                 runCatching {
                                     Vidara().getUrl(hl.url, mainUrl, { sub ->
+                                        synchronized(lock) { subtitleCallback(sub) }
+                                    }) { link ->
+                                        produced++
+                                        emit(relabel(link, hl.lang))
+                                    }
+                                }
+                            } else if ("blinkflux.lol" in hl.url) {
+                                // Lecteur zeus/mouve : charge chiffrée → POST unlock → flux direct
+                                runCatching {
+                                    BlinkFlux().getUrl(hl.url, mainUrl, { sub ->
                                         synchronized(lock) { subtitleCallback(sub) }
                                     }) { link ->
                                         produced++
@@ -804,7 +873,13 @@ class ZenixProvider : MainAPI() {
         if (link.referer.isNotBlank() && !headers.containsKey("Referer")) headers["Referer"] = link.referer
         headers.forEach { (k, v) -> builder.header(k, v) }
         doctorClient.newCall(builder.build()).execute().use { res ->
-            if (!res.isSuccessful) return@use false
+            if (!res.isSuccessful) {
+                // 403 (géoblocage / anti-bot incertain), 416 (Range mal géré) et
+                // 429 (limite momentanée) → on garde le lien par prudence ;
+                // 404/410/5xx → vraiment mort → on le retire.
+                val code = res.code
+                return@use code == 403 || code == 416 || code == 429
+            }
             val body = res.body ?: return@use false
             val head = ByteArray(512)
             var n = 0
@@ -821,6 +896,8 @@ class ZenixProvider : MainAPI() {
             val isEbml = n >= 4 && (head[0].toInt() and 0xFF) == 0x1A && (head[1].toInt() and 0xFF) == 0x45 &&
                 (head[2].toInt() and 0xFF) == 0xDF && (head[3].toInt() and 0xFF) == 0xA3
             val isTs = (head[0].toInt() and 0xFF) == 0x47
+            val isFlv = prefix.startsWith("FLV") || prefix.startsWith("OggS") || prefix.startsWith("ID3")
+            val isMp3Sync = n >= 2 && (head[0].toInt() and 0xFF) == 0xFF && (head[1].toInt() and 0xE0) == 0xE0
             when {
                 link.type == ExtractorLinkType.DASH || ".mpd" in link.url ->
                     prefix.contains("<MPD") || prefix.contains("<?xml")
@@ -828,7 +905,7 @@ class ZenixProvider : MainAPI() {
                     prefix.contains("#EXTM3U") || contentType.contains("mpegurl")
                 contentType.startsWith("video/") || contentType.startsWith("audio/") -> true
                 prefix.contains("#EXTM3U") -> true
-                isFtyp || isEbml || isTs || prefix.startsWith("RIFF") -> true
+                isFtyp || isEbml || isTs || isFlv || isMp3Sync || prefix.startsWith("RIFF") -> true
                 else -> false
             }
         }
@@ -1036,6 +1113,12 @@ class ZenixProvider : MainAPI() {
         Regex("""(?:file|src|url|source)\s*[=:]\s*["'](https?://[^"']+)["']""")
             .findAll(page).map { it.groupValues[1] }.forEach { links.add(it) }
         directStreamRegex.findAll(page).map { it.value }.forEach { links.add(it) }
+        // Lecteurs videojs obfusqués (vidzy.cc, fsvid.lol…) : src = XOR(base64, hostname)
+        Regex("""\}\("([A-Za-z0-9+/=]{40,})"\)""").findAll(page).forEach { m ->
+            val host = Regex("""^https?://([^/]+)""").find(embedUrl)?.groupValues?.get(1) ?: return@forEach
+            decodeXorSource(m.groupValues[1], host)?.let { links.add(it) }
+        }
+
 
         links.asSequence()
             .filter { it.startsWith("http") }
@@ -1107,6 +1190,22 @@ class ZenixProvider : MainAPI() {
         Regex("""selectStream\(\d+,\s*'(.*?)',\s*'(.*?)',\s*'([a-zA-Z_]+)'\)""")
 
     private val episodeRegex = Regex("""/episode/[^/]+/(\d+)-(\d+)""")
+
+    /**
+     * Décode les sources videojs obfusquées « (function(s){var h=…})("base64") »
+     * utilisées par vidzy.cc, fsvid.lol… : base64 → inversion → XOR avec une
+     * clé dérivée du hostname de la page d'embed.
+     */
+    private fun decodeXorSource(b64: String, hostname: String): String? = runCatching {
+        val h = hostname.sumOf { it.code } and 0xFF
+        val a = android.util.Base64.decode(b64, android.util.Base64.DEFAULT).reversed()
+        val out = StringBuilder()
+        for (i in a.indices) {
+            val kk = (0x3d + i * 89 + h) and 0xFF
+            out.append(((a[i].toInt() and 0xFF) xor kk).toChar())
+        }
+        out.toString().takeIf { it.startsWith("http") }
+    }.getOrNull()
 
     private val directStreamRegex = Regex("""https?://[^"'\\\s<>]+\.(?:m3u8|mp4|webm)[^"'\\\s<>]*""")
 
