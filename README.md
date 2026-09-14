@@ -10,6 +10,19 @@ Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream)
 | **AfterdarkProvider** | [afd926.mom](https://afd926.mom/) (miroir de afterdark.best) | films & séries en **VOSTFR** (multi-serveurs) |
 
 
+## 🚀 Mise à jour du 14 septembre (nuit) — plus de serveurs (AnimoFlix v5, Zenix v5, WaveWatch v4, Afterdark v4)
+
+**Pourquoi si peu de serveurs ?** Les agrégateurs ont **rotaté leur catalogue d'hébergeurs** : les liens arrivent désormais sur de nouveaux lecteurs qu'aucun extracteur ne connaissait (miroirs Vidara, BlinkFlux, vidzy…), et certains agrégateurs ont perdu des titres (One Piece n'est plus chez wiflix/movix/1embed).
+
+| Amélioration | Effet |
+|---|---|
+| **Vidara : 16 domaines miroirs** | vidaraw.com, vidaraa.cc, vidarax.cc, vidara.so, vidavaca.net… partagent la même API — tous gérés par notre extracteur fiable (vrai type HLS/MP4) au lieu de l'extracteur intégré bogué |
+| **BlinkFlux** (zeus/mouve) | lecteur à charge chiffrée : déverrouillage automatique → flux MP4 direct — un serveur de plus sur films et séries |
+| **Lecteurs videojs obfusqués** (vidzy.cc, fsvid.lol…) | source XOR décodée par l'extension → serveurs supplémentaires via le fallback générique |
+| **AnimoFlix ~5× plus rapide** | lecteurs interrogés **en parallèle**, vérification de jouabilité non bloquante — la liste des serveurs apparaît **entière et vite** (fin des listes partielles « un seul serveur ») |
+| **Docteur de liens assoupli** | 403 (géoblocage/anti-bot incertain), 416, 429 → lien **conservé** ; seuls les liens vraiment morts (404/5xx, pages HTML) sont masqués |
+| **Formats reconnus élargis** | FLV, Ogg, MP3/AAC détectés jouables |
+
 ## 🛠️ Correctif du 14 septembre (soir) — erreur 3003 « Source error » (AnimoFlix v4, Zenix v4, WaveWatch v3, Afterdark v3)
 
 | Extension | Nouveautés |
@@ -69,6 +82,8 @@ https://x0.at/gMeP.json
 > ⚠️ Hébergement temporaire (expiration sous quelques semaines/mois). Pour un lien pérenne, poussez le dépôt sur GitHub — le workflow publiera tout automatiquement sur la branche `builds`.
 > ℹ️ Si vous aviez ajouté l'ancienne URL de test (v1, `x0.at/RluP.json`) : supprimez d'abord ce dépôt et l'extension dans CloudStream, puis ajoutez la nouvelle ci-dessus.
 
+**v5** : plus de serveurs — miroirs Vidara (16 domaines), BlinkFlux, lecteurs vidzy/fsvid décodés, lecteurs **en parallèle** (liste des serveurs instantanée, fin des listes tronquées), docteur assoupli (403/416/429 conservés).
+
 **v4** : correctif erreurs 3003 — docteur de liens (chaque lien vérifié jouable avant affichage) + extracteur Vidara réparé + doublons fusionnés.
 
 **v3** : bouton « Réglages » pour changer l'adresse du site ; miniatures des épisodes comme avant (numéro visible).
@@ -119,6 +134,8 @@ Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement :
 - **`.cs3` v2** : release [**zenix-v2 (Pre-release)**](https://github.com/j97970293-lang/plugin-fr/releases/tag/zenix-v2) → **Paramètres → Extensions → Installer un fichier**
 - Miroirs x0.at : `repo.json` → https://x0.at/M5wA.json · `plugins.json` → https://x0.at/k3u9.json · `ZenixProvider.cs3` v2 → https://x0.at/uVYD.cs3
 
+**v5** : plus de serveurs — miroirs Vidara (16 domaines), BlinkFlux, lecteurs vidzy/fsvid décodés, lecteurs **en parallèle** (liste des serveurs instantanée, fin des listes tronquées), docteur assoupli (403/416/429 conservés).
+
 **v4** : correctif erreurs 3003 — docteur de liens (chaque lien vérifié jouable avant affichage) + extracteur Vidara réparé + doublons fusionnés.
 
 **v3** : bouton « Réglages » pour changer l'adresse du site ; secours anime AnimoFlix (One Piece & co, derniers épisodes inclus) ; en TV seuls les liens playerix fiables (HLS) sont gardés — les iframes renvoyaient le même épisode pour tous.
@@ -144,6 +161,8 @@ Mêmes méthodes que AnimoFlix (dépôt ci-dessus), ou directement :
 ---
 
 # WaveWatch · Extension CloudStream (`.cs3`)
+
+> **v4** : plus de serveurs — miroirs Vidara (16 domaines), BlinkFlux, lecteurs vidzy/fsvid décodés, docteur assoupli (403/416/429 conservés).
 
 > **v3** : correctif erreurs 3003 — docteur de liens (chaque lien vérifié jouable avant affichage) + extracteur Vidara réparé + doublons fusionnés.
 
@@ -240,6 +259,8 @@ Projet à but éducatif. CloudStream et cette extension ne hébergent aucun cont
 
 # Afterdark · Extension CloudStream (`.cs3`)
 
+> **v4** : plus de serveurs — miroirs Vidara (16 domaines), BlinkFlux, lecteurs vidzy/fsvid décodés, docteur assoupli (403/416/429 conservés).
+
 > **v3** : correctif erreurs 3003 — docteur de liens (chaque lien vérifié jouable avant affichage) + extracteur Vidara réparé + doublons fusionnés.
 
 > **v2** : bouton « Réglages » pour changer l'adresse du site ; secours anime AnimoFlix (One Piece & co, derniers épisodes inclus) ; en TV seuls les liens playerix/mouve fiables sont gardés (les autres renvoyaient le même épisode pour tous).
@@ -260,13 +281,13 @@ Extension pour **[afd926.mom](https://afd926.mom/)** (miroir actif de `afterdark
 
 | Extension | Fichier | Miroir x0.at |
 |---|---|---|
-| Afterdark v3 | [AfterdarkProvider.cs3](releases/AfterdarkProvider.cs3) | [AfterdarkProvider.cs3](https://x0.at/OVnn.cs3) |
-| AnimoFlix v4 | [AnimoFlixProvider.cs3](releases/AnimoFlixProvider.cs3) | [AnimoFlixProvider.cs3](https://x0.at/jQ69.cs3) |
-| WaveWatch v3 | [WaveWatchProvider.cs3](releases/WaveWatchProvider.cs3) | [WaveWatchProvider.cs3](https://x0.at/mb1h.cs3) |
-| Zenix v4 | [ZenixProvider.cs3](releases/ZenixProvider.cs3) | [ZenixProvider.cs3](https://x0.at/gAhv.cs3) |
+| Afterdark v4 | [AfterdarkProvider.cs3](releases/AfterdarkProvider.cs3) | [AfterdarkProvider.cs3](https://x0.at/9jiS.cs3) |
+| AnimoFlix v5 | [AnimoFlixProvider.cs3](releases/AnimoFlixProvider.cs3) | [AnimoFlixProvider.cs3](https://x0.at/jw4w.cs3) |
+| WaveWatch v4 | [WaveWatchProvider.cs3](releases/WaveWatchProvider.cs3) | [WaveWatchProvider.cs3](https://x0.at/SjF7.cs3) |
+| Zenix v5 | [ZenixProvider.cs3](releases/ZenixProvider.cs3) | [ZenixProvider.cs3](https://x0.at/KMnW.cs3) |
 
 | Dépôt (repo.json) | Liste d'extensions (plugins.json) |
 |---|---|
-| https://x0.at/KWVn.json | https://x0.at/gpnX.json |
+| https://x0.at/Zlel.json | https://x0.at/snlN.json |
 
 > ⚠️ Miroirs du 14/09 (soir) — les derniers en date (correctif 3003). Les précédents (`PEvE`/`hkF6`…) resteront accessibles mais ne servent plus les nouvelles versions : remplacez l'URL du dépôt par celle ci-dessus, ou mettez simplement à jour chaque extension.
