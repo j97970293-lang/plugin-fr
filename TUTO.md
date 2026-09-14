@@ -220,6 +220,14 @@ Deux sites DLE, deux stratégies :
   `loadVideo\('([^']+)'(?:,\s*this)?\)[^>]*>\s*<span[^>]*>([^<]*)</span>`.
 - Séries : 1 article par saison, divs `ep{N}vs` (VOSTFR) et `ep{N}vf` (VF).
 - Recherche neutralisée (cf. §3.4) → catalogue paginé seulement (30/page).
+- ⚠ **PIÈGE DES FAUSSES CATÉGORIES** (14/09 midi) : TOUTES les URLs de flemmix
+  (/film-en-streaming/, /serie-en-streaming/, /vf/, genres…) renvoient la page
+  d'accueil (200, pas de redirection) — seul le `<title>` change ! La page
+  contient TOUJOURS le même carrousel « item » en haut (30 derniers) PUIS le
+  listing réel en cartes « mov » (`<div class="mov-i…"><img src=…> … <a
+  class="mov-t" href=…>`) : 20/page, pagination /page/N/ valide (p1∩p2 = 0).
+  → Pour des sections distinctes : parser UNIQUEMENT les cartes mov et ignorer
+  le carrousel ; la pagination se confirme en comparant les IDs page 1 vs 2.
 
 **anime-sama.to** :
 - Recherche : `POST /template-php/defaut/fetch.php` (form `query={q}`) →
@@ -269,6 +277,42 @@ l'URL avec `.replace("api.movix.cash", "api.movix.men")`.
 **VidNest** : extracteur INTÉGRÉ à CloudStream (`VidNest.class` dans le jar) →
 `loadExtractor` le gère nativement, il suffit d'émettre l'URL embed
 `vidnest.fun/{movie|tv}/{tmdb}[/s/e]`.
+
+### 3.8 SITE NEXT.js SSR « CLEAN » — cinestream.info (cas idéal)
+
+Structure 100 % SSR (Next.js App Router) sans protection — le cas le plus simple :
+- Cartes (accueil/genres/recherche, même markup partout) : `<a href="/film/{slug}">
+  … <img alt="Affiche du film {titre} en streaming en {langue} - {qualité}"
+  src="https://image.tmdb.org/t/p/w185/…">` — le alt contient TOUT (titre+langue).
+- Listes paginées : /film-en-streaming/{n}, /films-ajoutes-recemment/{n},
+  /films-populaires/{n}, /films/{Genre}/{n} (16 genres), /annee/{YYYY}/{n}.
+- Recherche SSR : `/search?q=…` (24 résultats, même markup que les cartes).
+- Fiche : og:title `Film {titre} {année} en Streaming`, og:image TMDB,
+  synopsis après `Synopsis du film</h3><p>`, boutons lecteurs
+  `<button id="{Nom}" aria-label="Lecteur {Nom} pour …">` (~15) + `tmdbid`
+  caché dans le payload RSC échappé : `\"tmdbid\":1368337`
+  (regex : `tmdbid[\"]*:+(\d+)` — les backslashes du payload piègent les
+  regex naïves).
+- LECTEURS : `/player/{tmdbid}/{index}` → `<iframe src="URL hébergeur">`
+  DIRECTement (Vidara, Voe, uqload, hanerix…) → loadExtractor, zéro décodage.
+- Leçon « fausse SPA » : un site Next.js PEUT être 100 % SSR (cinestream) alors
+  qu'un autre est 100 % CSR sans API (animesite.fr) — vérifier la présence
+  du contenu dans le HTML AVANT de conclure quoi que ce soit.
+
+### 3.9 RÈGLE D'OR DES SECTIONS MAINPAGE : VÉRIFIER LA DISTINCTIVITÉ
+
+Avant de publier, comparer les ENSEMBLES d'identifiants de chaque section :
+```
+section A vs section B : |ids(A) ∩ ids(B)| doit être ≈ 0
+page 1 vs page 2        : |ids(1) ∩ ids(2)| doit être 0 (sinon pagination morte)
+```
+Erreurs réelles du 14/09/2026 (2 extensions publiées avec sections cassées) :
+- FrenchStream : /films/vf/ ≡ /films/ (17/18), /series/vf/ renvoyait des FILMS,
+  /animes/ ≡ /series/ → 3 sections identiques sur 5. Les vraies catégories
+  étaient les GENRES (/films/actions/…) et /animation-serie-// (double slash !).
+- Flemmix : 4 sections = 4 fois la page d'accueil (cf. §3.6).
+- Cause racine : les URLs de menu d'un site peuvent exister (200) sans filtrer,
+  ou servir une page générique. TOUJOURS tester le CONTENU, jamais le statut.
 
 ---
 

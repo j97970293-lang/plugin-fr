@@ -193,18 +193,40 @@ class FlemmixProvider : MainAPI() {
     // -------------------------------------------------------------------------
     // Accueil & recherche
     // -------------------------------------------------------------------------
+    // Structure réelle du site (vérifiée au 14/09/2026) :
+    //  · la page d'accueil affiche des carrousels « item » (30 derniers ajouts) ;
+    //  · les pages de catégorie affichent le MÊME carrousel en haut puis le
+    //    listing réel en cartes « mov » (20/page, pagination /page/N/ valide) ;
+    //  · les URLs /film-en-streaming/ ou /serie-en-streaming/ seules servent
+    //    la page d'accueil → utiliser les chemins de genre ci-dessous.
     override val mainPage = mainPageOf(
-        "film" to "Films",
-        "film-ancien" to "Films anciens",
-        "serie" to "Séries",
-        "saison-complete" to "Saisons complètes"
+        "accueil" to "Derniers ajouts (accueil)",
+        "films" to "Films",
+        "films-action" to "Films · Action",
+        "films-comedie" to "Films · Comédie",
+        "films-animation" to "Films · Animation",
+        "films-thriller" to "Films · Thriller",
+        "films-sf" to "Films · Science-Fiction",
+        "films-horreur" to "Films · Horreur",
+        "films-anciens" to "Films anciens",
+        "series" to "Séries",
+        "vf" to "Séries VF",
+        "saisons-completes" to "Saisons complètes"
     )
 
     private fun pageUrl(name: String, page: Int): String {
         val base = when (name) {
-            "film" -> "/film-en-streaming/"
-            "film-ancien" -> "/film-ancien/"
-            "saison-complete" -> "/saison-complete/"
+            "accueil" -> "/"
+            "films" -> "/film-en-streaming/"
+            "films-action" -> "/film-en-streaming/action/"
+            "films-comedie" -> "/film-en-streaming/comedie/"
+            "films-animation" -> "/film-en-streaming/animation/"
+            "films-thriller" -> "/film-en-streaming/thriller/"
+            "films-sf" -> "/film-en-streaming/science-fiction/"
+            "films-horreur" -> "/film-en-streaming/horreur/"
+            "films-anciens" -> "/film-ancien/"
+            "vf" -> "/vf/"
+            "saisons-completes" -> "/saison-complete/"
             else -> "/serie-en-streaming/"
         }
         return if (page <= 1) currentUrl() + base else currentUrl() + base.trimEnd('/') + "/page/$page/"
@@ -212,11 +234,40 @@ class FlemmixProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
+        if (request.name == "accueil" && page > 1) {
+            return newHomePageResponse(request, emptyList(), false)
+        }
         val html = runCatching {
             app.get(pageUrl(request.name, page), headers = baseHeaders).text
         }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
-        val items = parseCards(html)
+        // L'accueil n'a que les carrousels ; les catégories ont le listing « mov »
+        // (on ignore leur carrousel partagé pour éviter des sections identiques).
+        val items = if (request.name == "accueil") parseCards(html) else parseMovCards(html)
         return newHomePageResponse(request, items, hasNext = items.size >= 15)
+    }
+
+    /** Cartes du listing catégorie : <div class="mov-i…"><img src=…> … <a class="mov-t" href=…>{titre}</a> */
+    private fun parseMovCards(html: String): List<SearchResponse> {
+        val out = mutableListOf<SearchResponse>()
+        Regex(
+            """<div class="mov-i[^"]*">\s*<img[^>]+src="([^"]+)"[^>]*alt="([^"]*)"[^>]*/>.*?<a class="mov-t[^"]*" href="([^"]+)">([^<]*)</a>""",
+            RegexOption.DOT_MATCHES_ALL
+        ).findAll(html).forEach { m ->
+            val posterRaw = m.groupValues[1]
+            val poster = if (posterRaw.startsWith("http")) posterRaw else currentUrl() + posterRaw
+            val href = m.groupValues[3]
+            val url = if (href.startsWith("http")) href else currentUrl() + href
+            val title = m.groupValues[4].trim()
+            if (title.isBlank()) return@forEach
+            val isSeries = "/serie-en-streaming/" in url || "/saison-complete/" in url ||
+                ("/vf/" in url && title.contains("saison", true))
+            out += if (isSeries) {
+                newAnimeSearchResponse(title, url, TvType.Anime) { this.posterUrl = poster }
+            } else {
+                newMovieSearchResponse(title, url, TvType.Movie) { this.posterUrl = poster }
+            }
+        }
+        return out.distinctBy { it.url }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {

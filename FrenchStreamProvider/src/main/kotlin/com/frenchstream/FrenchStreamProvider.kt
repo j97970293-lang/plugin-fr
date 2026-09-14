@@ -201,23 +201,40 @@ class FrenchStreamProvider : MainAPI() {
     // -------------------------------------------------------------------------
     // Accueil & recherche (DLE)
     // -------------------------------------------------------------------------
+    // Sections RÉELLES du site (vérifiées distinctes au 14/09/2026) :
+    // les pseudo-catégories /films/vf/, /series/vf/ et /animes/ renvoient
+    // toutes le même contenu que /films/ ou /series/ — les vrais filtres sont
+    // les pages de genre et les catégories dédiées ci-dessous.
     override val mainPage = mainPageOf(
-        "films" to "Films (derniers)",
-        "films-vf" to "Films VF",
-        "series" to "Séries",
-        "series-vf" to "Séries VF",
-        "animes" to "Animes"
+        "films" to "Films (derniers ajouts)",
+        "films-action" to "Films · Action",
+        "films-comedie" to "Films · Comédie",
+        "films-animation" to "Films · Animation",
+        "films-horreur" to "Films · Horreur",
+        "films-sf" to "Films · Science-Fiction",
+        "films-thriller" to "Films · Thriller",
+        "series" to "Séries (derniers ajouts)",
+        "animes" to "Animes (séries d'animation)",
+        "k-drama" to "K-Dramas",
+        "netflix" to "Séries Netflix"
     )
 
     private fun pageUrl(name: String, page: Int): String {
         val base = when (name) {
-            "films-vf" -> "/films/vf/"
-            "series-vf" -> "/series/vf/"
-            "animes" -> "/animes/"
+            "films-action" -> "/films/actions/"
+            "films-comedie" -> "/films/comedies/"
+            "films-animation" -> "/films/animations/"
+            "films-horreur" -> "/films/epouvante-horreurs/"
+            "films-sf" -> "/films/science-fictions/"
+            "films-thriller" -> "/films/thrillers/"
             "series" -> "/series/"
+            "animes" -> "/animation-serie-//"   // oui, double slash (URL réelle du menu)
+            "k-drama" -> "/k-drama-//"
+            "netflix" -> "/s-tv/netflix-series-/"
             else -> "/films/"
         }
-        return if (page <= 1) currentUrl() + base else currentUrl() + base.trimEnd('/') + "/page/$page/"
+        return if (page <= 1) currentUrl() + base
+        else currentUrl() + base.trimEnd('/') + "/page/$page/"
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {

@@ -1,6 +1,6 @@
 # Plugin fr · Dépôt d'extensions CloudStream (`.cs3`)
 
-Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **neuf extensions** :
+Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream) en français — **dix extensions** :
 
 | Extension | Site | Contenu |
 |---|---|---|
@@ -13,7 +13,19 @@ Dépôt d'extensions [CloudStream](https://github.com/recloudstream/cloudstream)
 | **FlemmixProvider** | [flemmix.cloud](https://flemmix.cloud/) | films & séries VF/VOSTFR — jusqu'à **16 lecteurs** par titre (Vidara, Uqload, VidMoly, Voe…) |
 | **VostfreeProvider** | [vostfree.ws](https://vostfree.ws/) | **animes VF & VOSTFR** + films d'animation (Sibnet, Uqload, Dood, Voe, Opvid…) |
 | **AnimeSamaProvider** | [anime-sama.to](https://anime-sama.to/) | **animes VF & VOSTFR** — catalogue complet, saisons, films & miroirs multiples |
+| **CineStreamProvider** | [cinestream.info](https://cinestream.info/) | **films VF/VOSTFR** — 15 lecteurs par titre (Vidara, Voe, Uqload, Vidmoly, StreamWish, FileLions…) |
 
+
+## 🔧 Correctif du 14 septembre (midi) — catalogues répétitifs corrigés + CineStream (FrenchStream v2, Flemmix v2, CineStream v1)
+
+| Extension | Correctif |
+|---|---|
+| **FrenchStream v2** | les sections « Films VF / Séries VF / Animes » renvoyaient toutes le même contenu que Films/Séries (URLs inexistantes sur le site) → **11 sections réelles** : genres films (Action, Comédie, Animation, Horreur, SF, Thriller), Séries, **Animes** (catégorie animation réelle), **K-Dramas**, Séries Netflix — pagination vérifiée |
+| **Flemmix v2** | les 4 sections affichaient toutes la page d'accueil (le carrousel du haut est identique partout et les listings réels n'étaient pas parsés) → **12 sections** avec les listings `mov` réels (20/page) : genres, Films anciens, Séries, **VF**, Saisons complètes + accueil (carrousels) — pagination vérifiée page 1 ≠ page 2 |
+| **CineStream v1** (NOUVEAU) | [cinestream.info](https://cinestream.info/) — films FR avec **15 lecteurs par titre** : Vidara, Voe, LuLuTV, Vidsonic, FMX, Hxfile, DdStream, Save, Uqload, Vmoly, Filelions, Swish, vostfr 1-3 — recherche SSR, 16 genres paginés, lecteurs via `/player/{tmdb}/{n}` → URL hébergeur directe |
+
+> ℹ️ **Recherches vérifiées une par une** (14/09 midi) : FrenchStream ✓, Vostfree ✓, Anime-Sama ✓, AnimoFlix ✓, Zenix ✓, WaveWatch ✓, Afterdark ✓, CineStream ✓. Flemmix : le moteur de recherche du site est **neutralisé côté serveur** (bot shield) — la navigation par catalogues est la voie d'accès (aucune recherche possible, même dans un navigateur).
+> ℹ️ Les épisodes n'affichent **pas de miniature** (numéro simple), comme demandé.
 
 ## 🆕🆕 Nouveauté du 14 septembre (matin) — 4 nouvelles extensions + plus de serveurs (French Stream, Flemmix, Vostfree, Anime-Sama · Afterdark v5, WaveWatch v5, Zenix v6)
 

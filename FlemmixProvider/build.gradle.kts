@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 1
+version = 2
 
 cloudstream {
     description = "Flemmix — Films & séries VF/VOSTFR, jusqu'à 16 lecteurs par titre (Vidara, Uqload, VidMoly, Voe…)"
