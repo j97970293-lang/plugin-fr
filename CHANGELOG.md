@@ -1,5 +1,25 @@
 # Journal des mises à jour
 
+## v7 — 2026-09-15 (correctifs des retours v6 : réglages, recherche, diagnostics)
+
+### 🔧 UnJour1FilmProvider v4 — le bouton réglages apparaît enfin
+- **Correction de câblage** : la fonction « changer l'adresse » existait depuis la v6 mais n'était pas branchée sur le bouton ⚙ (oubli d'`openSettings`) → le bouton n'apparaissait jamais. Corrigé.
+- **Erreurs visibles** : si le site est inaccessible, l'accueil affiche désormais un message explicite (« changez l'adresse dans les réglages ⚙ ») au lieu de sections vides silencieuses — plus de devinettes.
+- **En-têtes navigateur complets** (Accept, Sec-Fetch-…) : le WAF du site bloque les requêtes au user-agent non-navigateur (okhttp → 403) et peut noter les requêtes minimalistes.
+- **Fallback REST étendu** aux « Dernières sorties » (en plus de Films/Séries).
+
+### 🔧 PurstreamProvider v4 — même correction de câblage
+- Le bouton ⚙ « adresse du site + API » apparaît désormais (oubli d'`openSettings` en v6).
+
+### 🔧 AnimeSamaProvider v5 — recherche blindée
+- Le POST de recherche peut être bloqué par certains réseaux/WAF alors que les GET passent : si le POST ne donne rien, **fallback GET `/catalogue/?search=…`** (recherche côté serveur du formulaire catalogue) + en-tête `X-Requested-With` pour mimer le site.
+- **Correction de câblage** identique vérifiée (le réglage URL existait déjà et fonctionnait).
+
+### 🔧 AnimeSiteProvider v4 — réglages d'URL ajoutés
+- Bouton ⚙ pour changer l'adresse du site (demandé) + invalidation du cache sitemap si l'URL change.
+
+---
+
 ## v6 — 2026-09-15 (retours utilisateur : saisons, épisodes, serveurs, réglages)
 
 ### 🔧 AnimeSamaProvider v4 — numérotation des saisons enfin lisible

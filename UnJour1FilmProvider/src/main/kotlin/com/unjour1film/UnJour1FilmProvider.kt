@@ -60,6 +60,8 @@ class UnJour1FilmPlugin : Plugin() {
     override fun load(context: android.content.Context) {
         UnJour1FilmProvider.appContext = context.applicationContext
         registerMainAPI(UnJour1FilmProvider())
+        // bouton ⚙ dans CloudStream → Paramètres → Extensions → 1JOUR1FILM
+        openSettings = { ctx -> UnJour1FilmProvider.showSettings(ctx) }
     }
 }
 
@@ -120,16 +122,29 @@ class UnJour1FilmProvider : MainAPI() {
         mainUrl = currentUrl()
     }
 
+    // En-têtes « vrais navigateur » : le WAF du site bloque les requêtes
+    // au user-agent non-navigateur (okhttp/curl → 403) et note les requêtes
+    // minimalistes — on imite donc un navigateur complet.
     private val baseHeaders = mapOf(
         "User-Agent" to USER_AGENT,
-        "Accept-Language" to "fr-FR,fr;q=0.9"
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language" to "fr-FR,fr;q=0.9",
+        "Upgrade-Insecure-Requests" to "1",
+        "Sec-Fetch-Dest" to "document",
+        "Sec-Fetch-Mode" to "navigate",
+        "Sec-Fetch-Site" to "none",
+        "Sec-Fetch-User" to "?1"
     )
 
     private fun ajaxHeaders(referer: String) = baseHeaders + mapOf(
         // pas de Content-Type explicite : la bibliothèque le pose correctement
         // pour les données de formulaire (double en-tête = requête rejetée)
         "Origin" to mainUrl,
-        "Referer" to referer
+        "Referer" to referer,
+        "X-Requested-With" to "XMLHttpRequest",
+        "Sec-Fetch-Dest" to "empty",
+        "Sec-Fetch-Mode" to "cors",
+        "Sec-Fetch-Site" to "same-origin"
     )
 
     // -------------------------------------------------------------------------
@@ -147,8 +162,15 @@ class UnJour1FilmProvider : MainAPI() {
             if (page > 1) return newHomePageResponse(request, emptyList(), false)
             val html = runCatching {
                 app.get("$mainUrl/dernieres-sorties/", headers = baseHeaders).text
-            }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
-            return newHomePageResponse(request, parseCards(html), hasNext = false)
+            }.getOrNull()
+            val cards = html?.let { parseCards(it) } ?: emptyList()
+            if (cards.isNotEmpty()) return newHomePageResponse(request, cards, hasNext = false)
+            // fallback REST : les films/séries les plus récents
+            val rest = restCards("movies", page).first + restCards("tvshows", page).first
+            if (rest.isNotEmpty()) return newHomePageResponse(request, rest, hasNext = false)
+            throw ErrorLoadingException(
+                "Site 1JOUR1FILM inaccessible. Vérifiez votre connexion, puis changez l'adresse dans les réglages de l'extension (⚙) si le domaine a changé."
+            )
         }
         // ⚠ request.data = la clé ("movies"/"tvshows"), request.name = le libellé
         val type = request.data // movies | tvshows
@@ -157,8 +179,10 @@ class UnJour1FilmProvider : MainAPI() {
         // ---- Fallback REST si l'ajax est indisponible/vide ----
         if (items.isEmpty()) {
             val rest = restCards(type, page)
-            val hasNext = rest.second
-            return newHomePageResponse(request, rest.first, hasNext)
+            if (rest.first.isNotEmpty()) return newHomePageResponse(request, rest.first, rest.second)
+            throw ErrorLoadingException(
+                "Catalogue inaccessible. Vérifiez votre connexion, puis changez l'adresse dans les réglages de l'extension (⚙) si le domaine a changé."
+            )
         }
         val hasNext = root!!.first < 10_000 && items.size >= 20
         return newHomePageResponse(request, items, hasNext)
@@ -265,7 +289,9 @@ class UnJour1FilmProvider : MainAPI() {
         syncUrl()
         val html = runCatching {
             app.get(url, headers = baseHeaders).text
-        }.getOrNull() ?: throw ErrorLoadingException("Fiche inaccessible")
+        }.getOrNull() ?: throw ErrorLoadingException(
+            "Fiche inaccessible — si le problème persiste, changez l'adresse du site dans les réglages de l'extension (⚙)."
+        )
 
         val title = Regex("""<title>([^<]+)</title>""").find(html)?.groupValues?.get(1)
             ?.substringBefore('|')?.trim() ?: url.trimEnd('/').substringAfterLast('/').replace('-', ' ')

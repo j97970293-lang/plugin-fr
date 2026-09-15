@@ -266,27 +266,44 @@ class AnimeSamaProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         syncUrl()
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        // ---- 1) Recherche instantanée du site (POST fetch.php, jQuery-like) ----
         val html = runCatching {
             app.post(
                 currentUrl() + "/template-php/defaut/fetch.php",
                 referer = currentUrl() + "/",
-                headers = baseHeaders,
-                data = mapOf("query" to query)
+                headers = baseHeaders + mapOf(
+                    "X-Requested-With" to "XMLHttpRequest",
+                    "Origin" to currentUrl()
+                ),
+                data = mapOf("query" to q)
             ).text
-        }.getOrNull() ?: return emptyList()
+        }.getOrNull()
         val out = mutableListOf<SearchResponse>()
-        Regex(
-            """<a\s+href="([^"]+/catalogue/([a-z0-9.-]+)/?)"[^>]*class="asn-search-result"[^>]*>.*?<img[^>]+src="([^"]+)".*?<h3[^>]*>([^<]+)</h3>""",
-            RegexOption.DOT_MATCHES_ALL
-        ).findAll(html).forEach { m ->
-            val url = m.groupValues[1]
-            val poster = m.groupValues[3]
-            val title = htmlUnescape(m.groupValues[4]).trim()
-            if (title.isNotBlank()) {
-                out += newAnimeSearchResponse(title, url, TvType.Anime) { this.posterUrl = poster }
+        html?.let {
+            Regex(
+                """<a\s+href="([^"]+/catalogue/([a-z0-9.-]+)/?)"[^>]*class="asn-search-result"[^>]*>.*?<img[^>]+src="([^"]+)".*?<h3[^>]*>([^<]+)</h3>""",
+                RegexOption.DOT_MATCHES_ALL
+            ).findAll(it).forEach { m ->
+                val url = m.groupValues[1]
+                val poster = m.groupValues[3]
+                val title = htmlUnescape(m.groupValues[4]).trim()
+                if (title.isNotBlank()) {
+                    out += newAnimeSearchResponse(title, url, TvType.Anime) { this.posterUrl = poster }
+                }
             }
         }
-        return out.distinctBy { it.url }.ifEmpty { parseCatalogue(html) }
+        // ---- 2) Fallback GET /catalogue/?search=… ----
+        // Le POST peut être bloqué (WAF/Cloudflare) alors que les GET passent ;
+        // le formulaire du catalogue propose une recherche côté serveur.
+        if (out.isEmpty()) {
+            runCatching {
+                val eq = java.net.URLEncoder.encode(q, "UTF-8")
+                app.get("${currentUrl()}/catalogue/?search=$eq", headers = baseHeaders).text
+            }.getOrNull()?.let { out += parseCatalogue(it) }
+        }
+        return out.distinctBy { it.url }
     }
 
     /** Décode les entités HTML courantes des titres. */

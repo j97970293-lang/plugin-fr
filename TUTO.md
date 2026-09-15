@@ -491,7 +491,42 @@ saison/épisode (« Kai - Saga 1 (East Blue) · Épisode 5 »).
 **Règle** : un numéro de saison est une clé technique UNIQUE mais affichée —
 éviter les plages magiques (100+, 300+) au profit d'une suite compacte.
 
-### 4.3 Le cas particulier des ANIMES LONGS (One Piece & co)
+### 4.3 LE PIÈGE `openSettings` : un réglage non câblé n'existe pas (v7)
+
+**Problème constaté** : la v6 livrait `showSettings()` + `PREFS` sur Purstream
+et 1JOUR1FILM mais SANS `openSettings = { … }` dans le `Plugin.load()` → le
+bouton ⚙ n'apparaissait jamais ; l'utilisateur croit que la fonctionnalité
+n'est pas faite. AnimeSama (v3) avait le bon pattern.
+
+**Pattern COMPLET obligatoire** (les 3 morceaux) :
+1. `companion object` : `DEFAULT_URL`, `appContext`, `PREFS`,
+   `currentUrl()/setSiteUrl()/showSettings()`.
+2. `Plugin.load()` : `Provider.appContext = context.applicationContext` PUIS
+   `openSettings = { ctx -> Provider.showSettings(ctx) }`.
+3. `syncUrl()` (`mainUrl = currentUrl()`) en tête de CHAQUE override
+   (getMainPage/search/load/loadLinks), + invalider les caches indexés par URL.
+
+### 4.4 POST bloqué ≠ GET bloqué : toujours un fallback GET (v7)
+
+**Problème constaté** : la recherche AnimeSama (POST `fetch.php`) échouait
+chez l'utilisateur alors qu'elle marche partout ailleurs — certains
+WAF/Cloudflare défient les POST d'IP « suspectes » en laissant passer les GET.
+
+**Solution** : si le POST ne renvoie rien → **GET `/catalogue/?search={q}`**
+(le formulaire HTML du catalogue fait la même recherche côté serveur,
+cartes identiques à celles de la home). Tester TOUJOURS si le site expose une
+variante GET de chaque POST (formulaire HTML, query-string).
+
+**En-têtes** : mimer le site réel aide — jQuery envoie
+`X-Requested-With: XMLHttpRequest` ; les WAF notent aussi les requêtes aux
+en-têtes trop minimalistes (voir les Sec-Fetch-* en v7 sur 1jour1film, dont
+le WAF renvoie 403 aux user-agents okhttp/curl).
+
+**Diagnostic utilisateur** : une section d'accueil VIDE sans message est
+inexploitable — lever `ErrorLoadingException` avec un message actionnable
+(« changez l'adresse dans les réglages ⚙ ») plutôt que `return emptyList()`.
+
+### 4.5 Le cas particulier des ANIMES LONGS (One Piece & co)
 
 **Problème constaté** : TMDB numérote One Piece en ABSOLU par saison
 (S23 = E1156..E1181), les agrégateurs ne l'ont pas du tout (« Serie non trouvee »),

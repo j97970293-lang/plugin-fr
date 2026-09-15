@@ -1,280 +1,280 @@
 [
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=afd926.mom&sz=%size%",
-    "fileHash": "sha256-f3c84ab800fedd165e42323b296fd47059e60266740ce1b1da3aab0d54e80c30",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 97764,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Movie",
-      "TvSeries"
-    ],
-    "version": 6,
-    "internalName": "AfterdarkProvider",
-    "description": "Afterdark — Films et séries en VOSTFR (multi-serveurs)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AfterdarkProvider.cs3",
-    "name": "AfterdarkProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=anime-sama.to&sz=%size%",
-    "fileHash": "sha256-3bcc2f6234e740d8b18bda88d584db990f1625b36454a61ec06cd5b143cdcc8d",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 56941,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Anime",
-      "AnimeMovie",
-      "OVA"
-    ],
-    "version": 3,
-    "internalName": "AnimeSamaProvider",
-    "description": "Anime-Sama — Animes VF & VOSTFR (catalogue complet, saisons & films, miroirs multiples)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimeSamaProvider.cs3",
-    "name": "AnimeSamaProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=animesite.fr&sz=%size%",
-    "fileHash": "sha256-01618ee231e0d0e6b7d72cddb5ddc0d393b8f47be58deaeb654b9c1b2c32ebb1",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 30637,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Anime",
-      "AnimeMovie"
-    ],
-    "version": 3,
-    "internalName": "AnimeSiteProvider",
-    "description": "AnimeSite — Animes VF/VOSTFR, lecteurs SibNet MP4 directs, catalogues tendances/nouveautés/mieux notés",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimeSiteProvider.cs3",
-    "name": "AnimeSiteProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=animoflix.to&sz=%size%",
-    "fileHash": "sha256-3aebe54f932cd6eb8dc1f277cc3076d7ed55a9e471dfdffc4206b5912a683a4c",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 55901,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Anime",
-      "AnimeMovie",
-      "OVA",
-      "Cartoon"
-    ],
-    "version": 6,
-    "internalName": "AnimoFlixProvider",
-    "description": "AnimoFlix — Animes, films & OAV en VF/VOSTFR",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimoFlixProvider.cs3",
-    "name": "AnimoFlixProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=cinestream.info&sz=%size%",
-    "fileHash": "sha256-ce81fa8ab0ffe0cc4443a34a6c59ab4ddf768d48f0912bfca10acfa9a1d87098",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 30808,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Movie"
-    ],
-    "version": 3,
-    "internalName": "CineStreamProvider",
-    "description": "CineStream — Films VF/VOSTFR, 15 lecteurs par titre (Vidara, Voe, Uqload, Vidmoly, StreamWish, FileLions…)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/CineStreamProvider.cs3",
-    "name": "CineStreamProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=flemmix.cloud&sz=%size%",
-    "fileHash": "sha256-82035cdfabd2c1f91eb579f204f8fc38815addfb73430bb92d4937f464bfa5ac",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 43652,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Movie",
-      "TvSeries"
-    ],
-    "version": 4,
-    "internalName": "FlemmixProvider",
-    "description": "Flemmix — Films & séries VF/VOSTFR, jusqu'à 16 lecteurs par titre (Vidara, Uqload, VidMoly, Voe…)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/FlemmixProvider.cs3",
-    "name": "FlemmixProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=franime.fr&sz=%size%",
-    "fileHash": "sha256-cc78e8a9dddad32b2f90d37050c40886411c4ad96c5b02b9508d5f7eaa9d4dc4",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 58905,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Anime",
-      "AnimeMovie",
-      "OVA"
-    ],
-    "version": 3,
-    "internalName": "FranimeProvider",
-    "description": "FRAnime — Animes VF/VOSTFR, films & OAV (lecteurs Sibnet, VidMoly, FileMoon, SendVid, Uqload…)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/FranimeProvider.cs3",
-    "name": "FranimeProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=fs27.lol&sz=%size%",
-    "fileHash": "sha256-95d149b8e3c14b5a3b2751d0a0af62dd091d103981f364ba0efba675a212d3b6",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 46580,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Movie",
-      "TvSeries"
-    ],
-    "version": 4,
-    "internalName": "FrenchStreamProvider",
-    "description": "French Stream — Films & séries VF/VOSTFR (multi-lecteurs : Uqload, Vidzy, FileMoon, Dood, Voe…)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/FrenchStreamProvider.cs3",
-    "name": "FrenchStreamProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=purstream.ad&sz=%size%",
-    "fileHash": "sha256-b4917fd912a625b835af3f1b53f025ad911ba7ba34bf9b13ddadb9e5bd902153",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 20349,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Movie",
-      "TvSeries"
-    ],
-    "version": 2,
-    "internalName": "PurstreamProvider",
-    "description": "Purstream — Films et séries VF/VOSTFR en HLS direct (API purstream.ad)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/PurstreamProvider.cs3",
-    "name": "PurstreamProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=1jour1film0826b.website&sz=%size%",
-    "fileHash": "sha256-6a91e9fbdd05abcff51b158701bde3457f5291fc9b61c53e453a6413b202e297",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 26669,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Movie",
-      "TvSeries"
-    ],
-    "version": 2,
-    "internalName": "UnJour1FilmProvider",
-    "description": "1JOUR1FILM — Films et séries VF/VOSTFR (WordPress DooPlay, lecteurs Vidara & Lulustream)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/UnJour1FilmProvider.cs3",
-    "name": "UnJour1FilmProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=vostfree.ws&sz=%size%",
-    "fileHash": "sha256-a96337401cf0821f20748aaca551beba027bb63342c028a3e193ea2bfc0e8e53",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 35067,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Anime",
-      "Movie"
-    ],
-    "version": 3,
-    "internalName": "VostfreeProvider",
-    "description": "Vostfree — Animes VF & VOSTFR + films (Sibnet, Uqload, Dood, Voe, Opvid…)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/VostfreeProvider.cs3",
-    "name": "VostfreeProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=wavewatch.top&sz=%size%",
-    "fileHash": "sha256-d90d94666bd0b5bfe3b37fe248889fb4473b55e4890819688f289d47e2109098",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 107878,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Movie",
-      "TvSeries",
-      "Anime",
-      "Live"
-    ],
-    "version": 6,
-    "internalName": "WaveWatchProvider",
-    "description": "WaveWatch — Films, séries, animes & TV en direct (VF/VOSTFR)",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/WaveWatchProvider.cs3",
-    "name": "WaveWatchProvider"
-  },
-  {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=zenix.best&sz=%size%",
-    "fileHash": "sha256-a1aa03ca043c191757f09843cedf36ad6b303e3d79c3cb45b71f5ac11b564646",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 88784,
-    "status": 1,
-    "language": "fr",
-    "authors": [
-      "j97970293-lang"
-    ],
-    "tvTypes": [
-      "Movie",
-      "TvSeries"
-    ],
-    "version": 7,
-    "internalName": "ZenixProvider",
-    "description": "Zenix — Films et séries en VF/VOSTFR",
-    "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/ZenixProvider.cs3",
-    "name": "ZenixProvider"
-  }
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=afd926.mom&sz=%size%",
+        "fileHash": "sha256-f3c84ab800fedd165e42323b296fd47059e60266740ce1b1da3aab0d54e80c30",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 97764,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 6,
+        "internalName": "AfterdarkProvider",
+        "description": "Afterdark \u2014 Films et s\u00e9ries en VOSTFR (multi-serveurs)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AfterdarkProvider.cs3",
+        "name": "AfterdarkProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=anime-sama.to&sz=%size%",
+        "fileHash": "sha256-ccc6d0bb223203b38e64b64a79607bc8a18c1e621c0826b1c9b45aa41e0e94bb",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 58298,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie",
+            "OVA"
+        ],
+        "version": 4,
+        "internalName": "AnimeSamaProvider",
+        "description": "Anime-Sama \u2014 Animes VF & VOSTFR (catalogue complet, saisons & films, miroirs multiples)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimeSamaProvider.cs3",
+        "name": "AnimeSamaProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=animesite.fr&sz=%size%",
+        "fileHash": "sha256-01618ee231e0d0e6b7d72cddb5ddc0d393b8f47be58deaeb654b9c1b2c32ebb1",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 30637,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie"
+        ],
+        "version": 3,
+        "internalName": "AnimeSiteProvider",
+        "description": "AnimeSite \u2014 Animes VF/VOSTFR, lecteurs SibNet MP4 directs, catalogues tendances/nouveaut\u00e9s/mieux not\u00e9s",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimeSiteProvider.cs3",
+        "name": "AnimeSiteProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=animoflix.to&sz=%size%",
+        "fileHash": "sha256-3aebe54f932cd6eb8dc1f277cc3076d7ed55a9e471dfdffc4206b5912a683a4c",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 55901,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie",
+            "OVA",
+            "Cartoon"
+        ],
+        "version": 6,
+        "internalName": "AnimoFlixProvider",
+        "description": "AnimoFlix \u2014 Animes, films & OAV en VF/VOSTFR",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimoFlixProvider.cs3",
+        "name": "AnimoFlixProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=cinestream.info&sz=%size%",
+        "fileHash": "sha256-ce81fa8ab0ffe0cc4443a34a6c59ab4ddf768d48f0912bfca10acfa9a1d87098",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 30808,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 3,
+        "internalName": "CineStreamProvider",
+        "description": "CineStream \u2014 Films VF/VOSTFR, 15 lecteurs par titre (Vidara, Voe, Uqload, Vidmoly, StreamWish, FileLions\u2026)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/CineStreamProvider.cs3",
+        "name": "CineStreamProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=flemmix.cloud&sz=%size%",
+        "fileHash": "sha256-82035cdfabd2c1f91eb579f204f8fc38815addfb73430bb92d4937f464bfa5ac",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 43652,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 4,
+        "internalName": "FlemmixProvider",
+        "description": "Flemmix \u2014 Films & s\u00e9ries VF/VOSTFR, jusqu'\u00e0 16 lecteurs par titre (Vidara, Uqload, VidMoly, Voe\u2026)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/FlemmixProvider.cs3",
+        "name": "FlemmixProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=franime.fr&sz=%size%",
+        "fileHash": "sha256-cc78e8a9dddad32b2f90d37050c40886411c4ad96c5b02b9508d5f7eaa9d4dc4",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 58905,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie",
+            "OVA"
+        ],
+        "version": 3,
+        "internalName": "FranimeProvider",
+        "description": "FRAnime \u2014 Animes VF/VOSTFR, films & OAV (lecteurs Sibnet, VidMoly, FileMoon, SendVid, Uqload\u2026)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/FranimeProvider.cs3",
+        "name": "FranimeProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=fs27.lol&sz=%size%",
+        "fileHash": "sha256-95d149b8e3c14b5a3b2751d0a0af62dd091d103981f364ba0efba675a212d3b6",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 46580,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 4,
+        "internalName": "FrenchStreamProvider",
+        "description": "French Stream \u2014 Films & s\u00e9ries VF/VOSTFR (multi-lecteurs : Uqload, Vidzy, FileMoon, Dood, Voe\u2026)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/FrenchStreamProvider.cs3",
+        "name": "FrenchStreamProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=purstream.ad&sz=%size%",
+        "fileHash": "sha256-6c9b3dadb34766ffb3543f653dfdcc0750db2ff1b204d502ca6bf49110d52acd",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 35404,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 3,
+        "internalName": "PurstreamProvider",
+        "description": "Purstream \u2014 Films et s\u00e9ries VF/VOSTFR en HLS direct (API purstream.ad)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/PurstreamProvider.cs3",
+        "name": "PurstreamProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=1jour1film0826b.website&sz=%size%",
+        "fileHash": "sha256-6580c200e0ae9c5023b80268905fcc611eef7056c0e4ff9677a87fc439c2177d",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 41969,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 3,
+        "internalName": "UnJour1FilmProvider",
+        "description": "1JOUR1FILM \u2014 Films et s\u00e9ries VF/VOSTFR (WordPress DooPlay, lecteurs Vidara & Lulustream)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/UnJour1FilmProvider.cs3",
+        "name": "UnJour1FilmProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=vostfree.ws&sz=%size%",
+        "fileHash": "sha256-a96337401cf0821f20748aaca551beba027bb63342c028a3e193ea2bfc0e8e53",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 35067,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Anime",
+            "Movie"
+        ],
+        "version": 3,
+        "internalName": "VostfreeProvider",
+        "description": "Vostfree \u2014 Animes VF & VOSTFR + films (Sibnet, Uqload, Dood, Voe, Opvid\u2026)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/VostfreeProvider.cs3",
+        "name": "VostfreeProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=wavewatch.top&sz=%size%",
+        "fileHash": "sha256-d90d94666bd0b5bfe3b37fe248889fb4473b55e4890819688f289d47e2109098",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 107878,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "Live"
+        ],
+        "version": 6,
+        "internalName": "WaveWatchProvider",
+        "description": "WaveWatch \u2014 Films, s\u00e9ries, animes & TV en direct (VF/VOSTFR)",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/WaveWatchProvider.cs3",
+        "name": "WaveWatchProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=zenix.best&sz=%size%",
+        "fileHash": "sha256-a1aa03ca043c191757f09843cedf36ad6b303e3d79c3cb45b71f5ac11b564646",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
+        "fileSize": 88784,
+        "status": 1,
+        "language": "fr",
+        "authors": [
+            "j97970293-lang"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 7,
+        "internalName": "ZenixProvider",
+        "description": "Zenix \u2014 Films et s\u00e9ries en VF/VOSTFR",
+        "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/ZenixProvider.cs3",
+        "name": "ZenixProvider"
+    }
 ]

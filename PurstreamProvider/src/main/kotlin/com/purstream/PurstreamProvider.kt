@@ -66,6 +66,8 @@ class PurstreamPlugin : Plugin() {
     override fun load(context: android.content.Context) {
         PurstreamProvider.appContext = context.applicationContext
         registerMainAPI(PurstreamProvider())
+        // bouton ⚙ dans CloudStream → Paramètres → Extensions → Purstream
+        openSettings = { ctx -> PurstreamProvider.showSettings(ctx) }
     }
 }
 

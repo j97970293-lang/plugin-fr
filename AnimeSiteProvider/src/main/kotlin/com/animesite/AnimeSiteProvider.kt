@@ -70,16 +70,66 @@ import kotlinx.coroutines.sync.withLock
 @CloudstreamPlugin
 class AnimeSitePlugin : Plugin() {
     override fun load(context: android.content.Context) {
+        AnimeSiteProvider.appContext = context.applicationContext
         registerMainAPI(AnimeSiteProvider())
+        openSettings = { ctx -> AnimeSiteProvider.showSettings(ctx) }
     }
 }
 
 class AnimeSiteProvider : MainAPI() {
-    override var mainUrl = "https://animesite.fr"
+
+    companion object {
+        const val DEFAULT_URL = "https://animesite.fr"
+
+        @Volatile
+        var appContext: android.content.Context? = null
+
+        private const val PREFS_NAME = "animesite_settings"
+        private const val PREF_URL = "site_url"
+
+        fun currentUrl(): String = runCatching {
+            appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                ?.getString(PREF_URL, null)
+                ?.trim()?.trimEnd('/')
+                ?.takeIf { it.startsWith("http") }
+        }.getOrNull() ?: DEFAULT_URL
+
+        fun setSiteUrl(context: android.content.Context, url: String?) {
+            context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_URL, url?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") })
+                .apply()
+        }
+
+        fun showSettings(context: android.content.Context) {
+            val input = android.widget.EditText(context).apply {
+                setText(currentUrl()); hint = "https://…"
+            }
+            val pad = (context.resources.displayMetrics.density * 20).toInt()
+            val layout = android.widget.LinearLayout(context).apply {
+                setPadding(pad, pad / 2, pad, 0)
+                addView(input)
+            }
+            android.app.AlertDialog.Builder(context)
+                .setTitle("Adresse d'AnimeSite")
+                .setMessage("Si le site change de domaine, indiquez l'adresse actuelle.")
+                .setView(layout)
+                .setPositiveButton("Enregistrer") { _, _ -> setSiteUrl(context, input.text.toString()) }
+                .setNegativeButton("Annuler", null)
+                .setNeutralButton("Par défaut") { _, _ -> setSiteUrl(context, DEFAULT_URL) }
+                .show()
+        }
+    }
+
+    override var mainUrl = DEFAULT_URL
     override var name = "AnimeSite"
     override val supportedTypes = setOf(TvType.Anime, TvType.AnimeMovie)
     override var lang = "fr"
     override val hasMainPage = true
+
+    private fun syncUrl() {
+        mainUrl = currentUrl()
+    }
 
     private fun headers(referer: String = "$mainUrl/") = mapOf(
         "User-Agent" to USER_AGENT,
@@ -98,6 +148,7 @@ class AnimeSiteProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        syncUrl()
         val url = "$mainUrl/api/medias?name=${request.data}&page=$page"
         val items = runCatching {
             AppUtils.parseJson<List<AsMedia>>(app.get(url, headers = headers()).text)
@@ -111,6 +162,7 @@ class AnimeSiteProvider : MainAPI() {
     // Recherche — GET /search/{q} : résultats dans le payload RSC
     // -------------------------------------------------------------------------
     override suspend fun search(query: String): List<SearchResponse> {
+        syncUrl()
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
         val url = "$mainUrl/search/" + java.net.URLEncoder.encode(q, "UTF-8").replace("+", "%20")
@@ -167,14 +219,14 @@ class AnimeSiteProvider : MainAPI() {
     // cartes de l'accueil lançaient 20 téléchargements simultanés → gel de
     // l'application puis fermeture (ANR).
     // -------------------------------------------------------------------------
-    private var slugIndex: Map<Int, String>? = null
+    private var slugIndex: Pair<String, Map<Int, String>>? = null
     private val slugMutex = kotlinx.coroutines.sync.Mutex()
 
     private suspend fun slugFor(tvdbId: Int, title: String): String {
-        slugIndex?.let { return it[tvdbId] ?: slugify(title) }
+        slugIndex?.takeIf { it.first == mainUrl }?.let { return it.second[tvdbId] ?: slugify(title) }
         val map = slugMutex.withLock {
             // double vérification : un autre appel a pu finir pendant l'attente
-            slugIndex?.let { return it[tvdbId] ?: slugify(title) }
+            slugIndex?.takeIf { it.first == mainUrl }?.let { return it.second[tvdbId] ?: slugify(title) }
             runCatching {
                 val xml = app.get("$mainUrl/sitemap.xml", headers = headers()).text
                 Regex("""<loc>https?://[^<]+/(\d{5,9})-([a-z0-9-]+)</loc>""")
@@ -182,7 +234,7 @@ class AnimeSiteProvider : MainAPI() {
                     .associate { it.groupValues[1].toInt() to "${it.groupValues[1]}-${it.groupValues[2]}" }
             }.getOrNull() ?: emptyMap()
         }
-        slugIndex = map
+        slugIndex = mainUrl to map
         return map[tvdbId] ?: slugify(title)
     }
 
@@ -199,6 +251,7 @@ class AnimeSiteProvider : MainAPI() {
     // Fiche
     // -------------------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse {
+        syncUrl()
         val idAndSlug = url.trimEnd('/').substringAfterLast('/')
         val html = runCatching {
             app.get("$mainUrl/$idAndSlug", headers = headers("$mainUrl/")).text
@@ -268,6 +321,7 @@ class AnimeSiteProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        syncUrl()
         // data = https://animesite.fr/play/{idAndSlug}/{saison}/{episode}
         val m = Regex("""/play/([^/]+)/(\d+)/(\d+)""").find(data) ?: return false
         val (idAndSlug, season, episode) = m.destructured
