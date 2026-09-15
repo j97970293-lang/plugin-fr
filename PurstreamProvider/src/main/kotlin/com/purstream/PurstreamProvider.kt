@@ -107,13 +107,13 @@ class PurstreamProvider : MainAPI() {
         val items: List<SearchResponse>
         var hasNext = false
         when {
-            request.name == "recent" -> {
+            request.data == "recent" -> {
                 if (page > 1) return newHomePageResponse(request, emptyList(), false)
                 val root = runCatching { getJson("last-released-movies/48") }.getOrNull()
                     ?: return newHomePageResponse(request, emptyList(), false)
                 items = root.path("data").path("items").mapNotNull { it.toSearchResponse() }
             }
-            request.name == "catalog" -> {
+            request.data == "catalog" -> {
                 val root = runCatching { getJson("catalog/movies?page=$page") }.getOrNull()
                     ?: return newHomePageResponse(request, emptyList(), false)
                 val listNode = root.path("data").path("items")
@@ -122,7 +122,7 @@ class PurstreamProvider : MainAPI() {
             }
             else -> { // carousel:{titre}
                 if (page > 1) return newHomePageResponse(request, emptyList(), false)
-                val wanted = request.name.removePrefix("carousel:")
+                val wanted = request.data.removePrefix("carousel:")
                 val carousel = fetchCarousels().firstOrNull { it.first.equals(wanted, ignoreCase = true) }
                     ?: return newHomePageResponse(request, emptyList(), false)
                 items = carousel.second.mapNotNull { it.toSearchResponse() }
@@ -144,12 +144,13 @@ class PurstreamProvider : MainAPI() {
     // -------------------------------------------------------------------------
     // Fiche
     // -------------------------------------------------------------------------
+    // Les fiches utilisent de vraies URLs (https://purstream.ad/movie/{id} ou
+    // /serie/{id}) : CloudStream les manipule sans souci, l'identifiant est le
+    // dernier segment du chemin.
     override suspend fun load(url: String): LoadResponse {
-        // url = ps:{id}:{movie|tv}
-        val parts = url.split(":")
-        if (parts.size < 3) throw ErrorLoadingException("URL interne invalide")
-        val id = parts[1]
-        val type = parts[2]
+        val id = url.trimEnd('/').substringAfterLast('/').toIntOrNull()
+            ?: throw ErrorLoadingException("Fiche introuvable")
+        val type = if (url.contains("/serie/")) "tv" else "movie"
 
         val sheet = runCatching { getJson("media/$id/sheet") }.getOrNull()
             ?: throw ErrorLoadingException("Fiche inaccessible")
@@ -170,7 +171,7 @@ class PurstreamProvider : MainAPI() {
                     val n = ep.path("episode").asInt(0)
                     val s = ep.path("season").asInt(season.path("season").asInt(1))
                     if (n > 0) {
-                        episodes += newEpisode("ps:$id:tv:$s:$n") {
+                        episodes += newEpisode("$mainUrl/play/tv/$id/$s/$n") {
                             this.season = s
                             this.episode = n
                             this.name = ep.path("name").asText(null)?.takeIf { it.isNotBlank() }
@@ -192,7 +193,7 @@ class PurstreamProvider : MainAPI() {
             }
         }
 
-        return newMovieLoadResponse(title, url, TvType.Movie, "ps:$id:movie") {
+        return newMovieLoadResponse(title, url, TvType.Movie, "$mainUrl/play/movie/$id") {
             this.posterUrl = poster
             this.plot = plot
             this.year = year
@@ -203,19 +204,26 @@ class PurstreamProvider : MainAPI() {
     // -------------------------------------------------------------------------
     // Lecture
     // -------------------------------------------------------------------------
+    // data = https://purstream.ad/play/movie/{id}
+    //      | https://purstream.ad/play/tv/{id}/{season}/{episode}
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (com.lagradost.cloudstream3.SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        // data = ps:{id}:movie | ps:{id}:tv:{season}:{episode}
-        val parts = data.split(":")
-        if (parts.size < 3) return false
-        val id = parts[1]
-        val endpoint = when {
-            parts[2] == "tv" && parts.size >= 5 ->
-                "stream/$id/episode?season=${parts[3]}&episode=${parts[4]}"
+        val segments = data.trimEnd('/').split("/").filter { it.isNotBlank() }
+        // …/play/{movie|tv}/{id}[/{season}/{episode}]
+        val playIdx = segments.indexOfLast { it == "play" }
+        if (playIdx < 0) return false
+        val kind = segments.getOrNull(playIdx + 1) ?: return false
+        val id = segments.getOrNull(playIdx + 2) ?: return false
+        val endpoint = when (kind) {
+            "tv" -> {
+                val s = segments.getOrNull(playIdx + 3) ?: return false
+                val e = segments.getOrNull(playIdx + 4) ?: return false
+                "stream/$id/episode?season=$s&episode=$e"
+            }
             else -> "stream/$id"
         }
         val root = runCatching { getJson(endpoint) }.getOrNull() ?: return false
@@ -249,8 +257,9 @@ class PurstreamProvider : MainAPI() {
         val t = path("title").asText(null)?.trim() ?: return null
         val poster = path("large_poster_path").asText(null)
             ?: path("posters").path("large").asText(null)
-        val url = "ps:$id:" + if (path("type").asText("movie") == "tv") "tv" else "movie"
-        return if (path("type").asText("movie") == "tv") {
+        val isTv = path("type").asText("movie") == "tv"
+        val url = if (isTv) "$mainUrl/serie/$id" else "$mainUrl/movie/$id"
+        return if (isTv) {
             newTvSeriesSearchResponse(t, url, TvType.TvSeries) { this.posterUrl = poster }
         } else {
             newMovieSearchResponse(t, url, TvType.Movie) { this.posterUrl = poster }

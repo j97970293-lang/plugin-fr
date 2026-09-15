@@ -78,7 +78,8 @@ class UnJour1FilmProvider : MainAPI() {
     )
 
     private fun ajaxHeaders(referer: String) = baseHeaders + mapOf(
-        "Content-Type" to "application/x-www-form-urlencoded",
+        // pas de Content-Type explicite : la bibliothèque le pose correctement
+        // pour les données de formulaire (double en-tête = requête rejetée)
         "Origin" to mainUrl,
         "Referer" to referer
     )
@@ -93,14 +94,15 @@ class UnJour1FilmProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        if (request.name == "sorties") {
+        if (request.data == "sorties") {
             if (page > 1) return newHomePageResponse(request, emptyList(), false)
             val html = runCatching {
                 app.get("$mainUrl/dernieres-sorties/", headers = baseHeaders).text
             }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
             return newHomePageResponse(request, parseCards(html), hasNext = false)
         }
-        val type = request.name // movies | tvshows
+        // ⚠ request.data = la clé ("movies"/"tvshows"), request.name = le libellé
+        val type = request.data // movies | tvshows
         val root = runCatching {
             catalogue(type, page, "")
         }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)

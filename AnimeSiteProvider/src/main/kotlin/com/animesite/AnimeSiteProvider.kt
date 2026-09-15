@@ -61,6 +61,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import java.text.Normalizer
 import java.util.concurrent.Semaphore
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Point d'entrée du plugin — c'est CETTE classe que CloudStream charge
@@ -162,17 +163,25 @@ class AnimeSiteProvider : MainAPI() {
 
     // -------------------------------------------------------------------------
     // Sitemap : tvdbId → slug exact (cache par session)
+    // ⚠ 486 Ko — ne doit être téléchargé qu'UNE fois : sans verrou, les 20
+    // cartes de l'accueil lançaient 20 téléchargements simultanés → gel de
+    // l'application puis fermeture (ANR).
     // -------------------------------------------------------------------------
     private var slugIndex: Map<Int, String>? = null
+    private val slugMutex = kotlinx.coroutines.sync.Mutex()
 
     private suspend fun slugFor(tvdbId: Int, title: String): String {
         slugIndex?.let { return it[tvdbId] ?: slugify(title) }
-        val map = runCatching {
-            val xml = app.get("$mainUrl/sitemap.xml", headers = headers()).text
-            Regex("""<loc>https?://[^<]+/(\d{5,9})-([a-z0-9-]+)</loc>""")
-                .findAll(xml)
-                .associate { it.groupValues[1].toInt() to "${it.groupValues[1]}-${it.groupValues[2]}" }
-        }.getOrNull() ?: emptyMap()
+        val map = slugMutex.withLock {
+            // double vérification : un autre appel a pu finir pendant l'attente
+            slugIndex?.let { return it[tvdbId] ?: slugify(title) }
+            runCatching {
+                val xml = app.get("$mainUrl/sitemap.xml", headers = headers()).text
+                Regex("""<loc>https?://[^<]+/(\d{5,9})-([a-z0-9-]+)</loc>""")
+                    .findAll(xml)
+                    .associate { it.groupValues[1].toInt() to "${it.groupValues[1]}-${it.groupValues[2]}" }
+            }.getOrNull() ?: emptyMap()
+        }
         slugIndex = map
         return map[tvdbId] ?: slugify(title)
     }

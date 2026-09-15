@@ -38,6 +38,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.jsoup.Jsoup
 
 /**
@@ -163,18 +164,20 @@ class AnimeSamaProvider : MainAPI() {
     // Accueil & recherche
     // -------------------------------------------------------------------------
     // Sections de la home : carrousel « Nouveautés », cartes « Derniers
-    // épisodes ajoutés » (avec badge langue) et catalogue complet.
+    // épisodes ajoutés » (avec badge langue), planning et catalogue complet.
+    // ⚠ Router sur request.data (la clé), jamais request.name (le libellé).
     override val mainPage = mainPageOf(
         "nouveautes" to "Nouveautés",
         "vostfr" to "Derniers épisodes VOSTFR",
         "vf" to "Derniers épisodes VF",
+        "planning" to "Animes du planning (en cours)",
         "catalogue" to "Catalogue complet"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
         if (page > 1) return newHomePageResponse(request, emptyList(), false)
-        when (request.name) {
+        when (request.data) {
             "catalogue" -> {
                 val html = runCatching {
                     app.get(currentUrl() + "/catalogue/", headers = baseHeaders).text
@@ -185,8 +188,21 @@ class AnimeSamaProvider : MainAPI() {
                 val home = fetchHome() ?: return newHomePageResponse(request, emptyList(), false)
                 return newHomePageResponse(request, parseCarousel(home), hasNext = false)
             }
+            "planning" -> {
+                val html = runCatching {
+                    app.get(currentUrl() + "/planning/", headers = baseHeaders).text
+                }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
+                val cards = parseRecentCards(html)
+                    .distinctBy { it.slug }
+                    .map {
+                        newAnimeSearchResponse(it.title, "$mainUrl/catalogue/${it.slug}/", TvType.Anime) {
+                            this.posterUrl = it.poster
+                        }
+                    }
+                return newHomePageResponse(request, cards, hasNext = false)
+            }
             else -> { // vostfr / vf
-                val wantLang = if (request.name == "vf") "vf" else "vostfr"
+                val wantLang = if (request.data == "vf") "vf" else "vostfr"
                 val home = fetchHome() ?: return newHomePageResponse(request, emptyList(), false)
                 val cards = parseRecentCards(home)
                     .filter { it.lang == wantLang }
@@ -362,13 +378,44 @@ class AnimeSamaProvider : MainAPI() {
             SeasonInfo(name, paths, unique)
         }.sortedWith(compareBy({ it.uniqueSeason >= 300 }, { it.uniqueSeason }))
 
-        // Compte les épisodes de chaque saison (episodes.js, en parallèle)
+        // Compte les épisodes de chaque saison (episodes.js). On limite la
+        // concurrence (Semaphore) et on réessaie : en 4G, 27 requêtes d'un coup
+        // font échouer la moitié des comptages → saisons réduites à 1 épisode.
+        val sem = kotlinx.coroutines.sync.Semaphore(3)
         val counts = coroutineScope {
             byName.map { s ->
                 async(Dispatchers.IO) {
-                    s to s.paths.mapNotNull { p -> runCatching { countEpisodes("$mainUrl/catalogue/$slug/$p/") }.getOrNull() }.maxOrNull()
+                    sem.withPermit {
+                        val c = s.paths.mapNotNull { p -> countEpisodesRobust("$mainUrl/catalogue/$slug/$p/") }.maxOrNull()
+                        s to c
+                    }
                 }
             }.awaitAll()
+        }
+
+        // Versions VF : la fiche ne liste souvent que les panneaux VOSTFR alors
+        // que les pages /vf/ existent (découvertes via les CTA de la home). On
+        // sonde la 1re saison en VF ; si elle existe, on sonde toutes les autres
+        // → remplit la piste DUB (sélecteur SUB/DUB dans CloudStream).
+        val vfCounts: Map<SeasonInfo, Int> = run {
+            val firstVostfr = byName.firstOrNull()?.paths?.firstOrNull { it.endsWith("/vostfr") }
+                ?: return@run emptyMap()
+            val firstVf = firstVostfr.removeSuffix("vostfr") + "vf"
+            if (runCatching { countEpisodesRobust("$mainUrl/catalogue/$slug/$firstVf/") }.getOrNull() == null) {
+                return@run emptyMap()
+            }
+            coroutineScope {
+                byName.map { s ->
+                    async(Dispatchers.IO) {
+                        sem.withPermit {
+                            val vfPaths = s.paths.filter { it.endsWith("/vostfr") }
+                                .map { it.removeSuffix("vostfr") + "vf" }
+                            val c = vfPaths.mapNotNull { p -> countEpisodesRobust("$mainUrl/catalogue/$slug/$p/") }.maxOrNull()
+                            s to c
+                        }
+                    }
+                }.awaitAll()
+            }.mapNotNull { (s, c) -> c?.let { s to it } }.toMap()
         }
 
         val subbed = mutableListOf<Episode>()
@@ -387,6 +434,21 @@ class AnimeSamaProvider : MainAPI() {
                         if (!plain) this.name = "${season.name} · Épisode $ep"
                         // pas de vignette d'épisode côté site → poster de la fiche
                         this.posterUrl = poster
+                    }
+                }
+            }
+            // piste VF (dub) de la même saison, si les pages /vf/ existent
+            vfCounts[season]?.let { nvf ->
+                season.paths.firstOrNull { it.endsWith("/vostfr") }?.let { vostfrPath ->
+                    val vfPath = vostfrPath.removeSuffix("vostfr") + "vf"
+                    val plain = Regex("""^\s*(?:saison|season)\s*\d+\s*$""", RegexOption.IGNORE_CASE).matches(season.name)
+                    for (ep in 1..nvf) {
+                        dubbed += newEpisode(episodeDataUrl(slug, vfPath, ep)) {
+                            this.season = season.uniqueSeason
+                            this.episode = ep
+                            if (!plain) this.name = "${season.name} · Épisode $ep"
+                            this.posterUrl = poster
+                        }
                     }
                 }
             }
@@ -410,12 +472,26 @@ class AnimeSamaProvider : MainAPI() {
         mainUrl + "/e?slug=" + java.net.URLEncoder.encode(slug, "UTF-8") +
             "&p=" + java.net.URLEncoder.encode(seasonPath, "UTF-8") + "&n=$ep"
 
-    /** Nombre d'épisodes d'une page saison (via episodes.js). */
+    /** Nombre d'épisodes d'une page saison (via episodes.js), avec 2 tentatives. */
+    private suspend fun countEpisodesRobust(seasonUrl: String): Int? {
+        repeat(3) { attempt ->
+            val n = runCatching { countEpisodes(seasonUrl) }.getOrNull()
+            if (n != null) return n
+            if (attempt < 2) kotlinx.coroutines.delay(400L * (attempt + 1))
+        }
+        return null
+    }
+
+    /** Nombre d'épisodes d'une page saison (via episodes.js).
+     *  null = erreur réseau (à retenter) ; 0 = page sans episodes.js (ex. VF absent). */
     private suspend fun countEpisodes(seasonUrl: String): Int? {
         val html = runCatching {
             app.get(seasonUrl, headers = baseHeaders).text
         }.getOrNull() ?: return null
-        return fetchEpsArrays(seasonUrl, html).maxOfOrNull { it.value.size }
+        val hasJs = Regex("""src=['"][^'"]*episodes\.js""").containsMatchIn(html)
+        val arrays = fetchEpsArrays(seasonUrl, html)
+        if (arrays.isEmpty()) return if (hasJs) null else 0
+        return arrays.maxOfOrNull { it.value.size } ?: 0
     }
 
     /** episodes.js de la page saison → {epsN → [urls]} */

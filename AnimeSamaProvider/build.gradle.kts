@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 2
+version = 3
 
 cloudstream {
     description = "Anime-Sama — Animes VF & VOSTFR (catalogue complet, saisons & films, miroirs multiples)"

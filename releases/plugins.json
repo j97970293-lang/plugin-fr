@@ -22,10 +22,10 @@
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=anime-sama.to&sz=%size%",
-    "fileHash": "sha256-22e8b1f77b628867e20845c1f46ef6df1eda2b68c3b2631b867bb44559ebe4ba",
+    "fileHash": "sha256-3bcc2f6234e740d8b18bda88d584db990f1625b36454a61ec06cd5b143cdcc8d",
     "apiVersion": 1,
     "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 49926,
+    "fileSize": 56941,
     "status": 1,
     "language": "fr",
     "authors": [
@@ -36,7 +36,7 @@
       "AnimeMovie",
       "OVA"
     ],
-    "version": 2,
+    "version": 3,
     "internalName": "AnimeSamaProvider",
     "description": "Anime-Sama — Animes VF & VOSTFR (catalogue complet, saisons & films, miroirs multiples)",
     "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimeSamaProvider.cs3",
@@ -44,10 +44,10 @@
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=animesite.fr&sz=%size%",
-    "fileHash": "sha256-7ef364af017a4b0ccf7976eee544d25955bd5669ea8a460f3ba05b80fc053d64",
+    "fileHash": "sha256-01618ee231e0d0e6b7d72cddb5ddc0d393b8f47be58deaeb654b9c1b2c32ebb1",
     "apiVersion": 1,
     "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 29856,
+    "fileSize": 30637,
     "status": 1,
     "language": "fr",
     "authors": [
@@ -57,7 +57,7 @@
       "Anime",
       "AnimeMovie"
     ],
-    "version": 2,
+    "version": 3,
     "internalName": "AnimeSiteProvider",
     "description": "AnimeSite — Animes VF/VOSTFR, lecteurs SibNet MP4 directs, catalogues tendances/nouveautés/mieux notés",
     "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/AnimeSiteProvider.cs3",
@@ -172,10 +172,10 @@
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=purstream.ad&sz=%size%",
-    "fileHash": "sha256-20ad317c4f65a395fc19ad32694be1f92abfa19b375bf3a6bdda7fb069e1986f",
+    "fileHash": "sha256-b4917fd912a625b835af3f1b53f025ad911ba7ba34bf9b13ddadb9e5bd902153",
     "apiVersion": 1,
     "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 19771,
+    "fileSize": 20349,
     "status": 1,
     "language": "fr",
     "authors": [
@@ -185,7 +185,7 @@
       "Movie",
       "TvSeries"
     ],
-    "version": 1,
+    "version": 2,
     "internalName": "PurstreamProvider",
     "description": "Purstream — Films et séries VF/VOSTFR en HLS direct (API purstream.ad)",
     "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/PurstreamProvider.cs3",
@@ -193,10 +193,10 @@
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=1jour1film0826b.website&sz=%size%",
-    "fileHash": "sha256-c25356dae73a6ec4908f1a54a5cc189126d4d2e573d7286ffd7b6b7454b26c77",
+    "fileHash": "sha256-6a91e9fbdd05abcff51b158701bde3457f5291fc9b61c53e453a6413b202e297",
     "apiVersion": 1,
     "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-    "fileSize": 26715,
+    "fileSize": 26669,
     "status": 1,
     "language": "fr",
     "authors": [
@@ -206,7 +206,7 @@
       "Movie",
       "TvSeries"
     ],
-    "version": 1,
+    "version": 2,
     "internalName": "UnJour1FilmProvider",
     "description": "1JOUR1FILM — Films et séries VF/VOSTFR (WordPress DooPlay, lecteurs Vidara & Lulustream)",
     "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/UnJour1FilmProvider.cs3",

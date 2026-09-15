@@ -1,4 +1,4 @@
-version = 2
+version = 3
 
 cloudstream {
     description = "AnimeSite — Animes VF/VOSTFR, lecteurs SibNet MP4 directs, catalogues tendances/nouveautés/mieux notés"
