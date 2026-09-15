@@ -88,10 +88,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=cinestream.info&sz=%size%",
-        "fileHash": "sha256-a75d3c22c803295405755416e9009d03abdc3f90fa094c7986a8e1f377ca1c4c",
+        "fileHash": "sha256-e534a244ee4d5504e174c55844833dc1bfe61901041a9ea65ef95b7c2313fdc3",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-        "fileSize": 31248,
+        "fileSize": 37333,
         "status": 1,
         "language": "fr",
         "authors": [
@@ -100,7 +100,7 @@
         "tvTypes": [
             "Movie"
         ],
-        "version": 4,
+        "version": 5,
         "internalName": "CineStreamProvider",
         "description": "CineStream \u2014 Films VF/VOSTFR, 15 lecteurs par titre (Vidara, Voe, Uqload, Vidmoly, StreamWish, FileLions\u2026)",
         "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/CineStreamProvider.cs3",
@@ -193,10 +193,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=iptv-org.github.io&sz=%size%",
-        "fileHash": "sha256-f956e618ae6d1d86d02a8290424996de74ff1d5b6e2f4b08ee857ec0153d3e64",
+        "fileHash": "sha256-a589cd3104b3c3d7328362955bb51229e4983eb8338ccafe55713809d0363882",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-        "fileSize": 17755,
+        "fileSize": 23901,
         "status": 1,
         "language": "fr",
         "authors": [
@@ -205,7 +205,7 @@
         "tvTypes": [
             "Live"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "TeleFranceProvider",
         "description": "T\u00e9l\u00e9 FR Direct \u2014 Cha\u00eenes de t\u00e9l\u00e9vision fran\u00e7aises en direct (info, cin\u00e9ma, s\u00e9ries, sport, enfants, documentaires) via les flux publics IPTV",
         "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/TeleFranceProvider.cs3",
@@ -213,10 +213,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=1jour1film0826b.website&sz=%size%",
-        "fileHash": "sha256-2b40942101616621aa0204c9ad2717e128246545de6fa26e00af9308f71732ef",
+        "fileHash": "sha256-a192ab60333cbab14894f1c62548cc5bb59b84558e2a26cfdba4b5beeac994a3",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-        "fileSize": 43178,
+        "fileSize": 55991,
         "status": 1,
         "language": "fr",
         "authors": [
@@ -226,7 +226,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 5,
+        "version": 6,
         "internalName": "UnJour1FilmProvider",
         "description": "1JOUR1FILM \u2014 Films et s\u00e9ries VF/VOSTFR (WordPress DooPlay, lecteurs Vidara & Lulustream)",
         "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/UnJour1FilmProvider.cs3",
@@ -255,10 +255,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=wavewatch.top&sz=%size%",
-        "fileHash": "sha256-d90d94666bd0b5bfe3b37fe248889fb4473b55e4890819688f289d47e2109098",
+        "fileHash": "sha256-53e44b87b8eb5197df99bc5d91a0dd4b3adc93b61d19f4e4efaa71cba60e24f3",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-        "fileSize": 107878,
+        "fileSize": 113589,
         "status": 1,
         "language": "fr",
         "authors": [
@@ -270,7 +270,7 @@
             "Anime",
             "Live"
         ],
-        "version": 6,
+        "version": 7,
         "internalName": "WaveWatchProvider",
         "description": "WaveWatch \u2014 Films, s\u00e9ries, animes & TV en direct (VF/VOSTFR)",
         "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/WaveWatchProvider.cs3",
@@ -278,10 +278,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=zenix.best&sz=%size%",
-        "fileHash": "sha256-a1aa03ca043c191757f09843cedf36ad6b303e3d79c3cb45b71f5ac11b564646",
+        "fileHash": "sha256-aa31c7385ef6b7413e93ffc15f5da5f8ef8315ac36f935ae63a4e84b83b11ff3",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/j97970293-lang/plugin-fr",
-        "fileSize": 88784,
+        "fileSize": 93690,
         "status": 1,
         "language": "fr",
         "authors": [
@@ -291,7 +291,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 7,
+        "version": 8,
         "internalName": "ZenixProvider",
         "description": "Zenix \u2014 Films et s\u00e9ries en VF/VOSTFR",
         "url": "https://raw.githubusercontent.com/j97970293-lang/plugin-fr/builds/ZenixProvider.cs3",
