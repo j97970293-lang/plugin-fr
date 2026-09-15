@@ -15,6 +15,7 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newAnimeLoadResponse
 import com.lagradost.cloudstream3.newAnimeSearchResponse
@@ -193,6 +194,12 @@ class FrenchStreamProvider : MainAPI() {
         mainUrl = currentUrl()
     }
 
+    // Site derrière Cloudflare : selon le réseau, la 1re requête peut être
+    // défiée. L'intercepteur résout le défi via WebView (automatique pour les
+    // challenges JS, un clic pour Turnstile) puis rejoue la requête avec le
+    // cookie cf_clearance — les suivantes passent seules.
+    private val cfKiller by lazy { CloudflareKiller() }
+
     private val baseHeaders get() = mapOf(
         "User-Agent" to USER_AGENT,
         "Accept-Language" to "fr-FR,fr;q=0.9"
@@ -240,7 +247,7 @@ class FrenchStreamProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
         val html = runCatching {
-            app.get(pageUrl(request.data, page), headers = baseHeaders).text
+            app.get(pageUrl(request.data, page), headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
         val items = parseCards(html)
         return newHomePageResponse(request, items, hasNext = items.size >= 15)
@@ -260,7 +267,8 @@ class FrenchStreamProvider : MainAPI() {
                     "do" to "search", "subaction" to "search", "story" to query,
                     "search_start" to "0", "full_search" to "0", "result_from" to "1"
                 ),
-                headers = baseHeaders
+                headers = baseHeaders,
+                interceptor = cfKiller
             ).text
         }.getOrNull() ?: return emptyList()
         val results = parseCards(html)
@@ -303,7 +311,7 @@ class FrenchStreamProvider : MainAPI() {
         val newsId = Regex("""newsid=(\d+)""").find(url)?.groupValues?.get(1)
             ?: throw ErrorLoadingException("URL French Stream invalide")
 
-        val html = app.get("$mainUrl/index.php?newsid=$newsId", headers = baseHeaders).text
+        val html = app.get("$mainUrl/index.php?newsid=$newsId", headers = baseHeaders, interceptor = cfKiller).text
         val doc = Jsoup.parse(html)
 
         val title = doc.selectFirst("h1")?.text()?.trim()?.replace(Regex("\\s*en streaming complet.*$", RegexOption.IGNORE_CASE), "")
@@ -351,7 +359,7 @@ class FrenchStreamProvider : MainAPI() {
 
     private suspend fun fetchFilmPlayers(newsId: String): List<FilmLink> {
         val json = runCatching {
-            app.get("$mainUrl/engine/ajax/film_api.php?id=$newsId", headers = baseHeaders + mapOf("X-Requested-With" to "XMLHttpRequest", "Referer" to "$mainUrl/index.php?newsid=$newsId")).text
+            app.get("$mainUrl/engine/ajax/film_api.php?id=$newsId", headers = baseHeaders + mapOf("X-Requested-With" to "XMLHttpRequest", "Referer" to "$mainUrl/index.php?newsid=$newsId"), interceptor = cfKiller).text
         }.getOrNull() ?: return emptyList()
         val out = mutableListOf<FilmLink>()
         runCatching {
@@ -378,7 +386,7 @@ class FrenchStreamProvider : MainAPI() {
 
     private suspend fun fetchSeriesEpisodes(newsId: String, poster: String?): List<Pair<DubStatus, Episode>> {
         val js = runCatching {
-            app.get("$mainUrl/static/series/$newsId.js", headers = baseHeaders).text
+            app.get("$mainUrl/static/series/$newsId.js", headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: return emptyList()
         val root = runCatching { mapper.readTree(js) }.getOrNull() ?: return emptyList()
         val out = mutableListOf<Pair<DubStatus, Episode>>()
@@ -447,7 +455,7 @@ class FrenchStreamProvider : MainAPI() {
             }
         } else if (filmId != null && epLang != null && epNum != null) {
             val js = runCatching {
-                app.get("$mainUrl/static/series/$filmId.js", headers = baseHeaders).text
+                app.get("$mainUrl/static/series/$filmId.js", headers = baseHeaders, interceptor = cfKiller).text
             }.getOrNull() ?: return false
             val root = runCatching { mapper.readTree(js) }.getOrNull() ?: return false
             val langLabel = when (epLang) { "vostfr" -> "VOSTFR"; "vf" -> "VF"; "vo" -> "VO"; else -> epLang.uppercase() }

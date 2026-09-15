@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 3
+version = 4
 
 cloudstream {
     description = "Vostfree — Animes VF & VOSTFR + films (Sibnet, Uqload, Dood, Voe, Opvid…)"

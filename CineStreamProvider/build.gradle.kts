@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 3
+version = 4
 
 cloudstream {
     description = "CineStream — Films VF/VOSTFR, 15 lecteurs par titre (Vidara, Voe, Uqload, Vidmoly, StreamWish, FileLions…)"

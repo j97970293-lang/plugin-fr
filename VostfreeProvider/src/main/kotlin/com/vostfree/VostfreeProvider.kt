@@ -12,6 +12,7 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newAnimeLoadResponse
 import com.lagradost.cloudstream3.newAnimeSearchResponse
@@ -122,6 +123,12 @@ class VostfreeProvider : MainAPI() {
         mainUrl = currentUrl()
     }
 
+    // Site derrière Cloudflare : selon le réseau, la 1re requête peut être
+    // défiée. L'intercepteur résout le défi via WebView (automatique pour les
+    // challenges JS, un clic pour Turnstile) puis rejoue la requête avec le
+    // cookie cf_clearance — les suivantes passent seules.
+    private val cfKiller by lazy { CloudflareKiller() }
+
     private val baseHeaders get() = mapOf(
         "User-Agent" to USER_AGENT,
         "Accept-Language" to "fr-FR,fr;q=0.9"
@@ -148,7 +155,7 @@ class VostfreeProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
         val html = runCatching {
-            app.get(pageUrl(request.data, page), headers = baseHeaders).text
+            app.get(pageUrl(request.data, page), headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
         val items = parseCards(html)
         return newHomePageResponse(request, items, hasNext = items.size >= 12)
@@ -160,7 +167,8 @@ class VostfreeProvider : MainAPI() {
             app.get(
                 currentUrl() + "/index.php?do=search&subaction=search&story=" +
                     java.net.URLEncoder.encode(query, "UTF-8"),
-                headers = baseHeaders
+                headers = baseHeaders,
+                interceptor = cfKiller
             ).text
         }.getOrNull() ?: return emptyList()
         // Les résultats de recherche DLE ont leur propre mise en page
@@ -208,7 +216,7 @@ class VostfreeProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         syncUrl()
         val html = runCatching {
-            app.get(url, headers = baseHeaders).text
+            app.get(url, headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: throw ErrorLoadingException("Fiche inaccessible")
 
         val doc = Jsoup.parse(html)
@@ -314,7 +322,7 @@ class VostfreeProvider : MainAPI() {
         val epNum = Regex("""[?&]n=(\d+)""").find(data)?.groupValues?.get(1)?.toIntOrNull() ?: return false
 
         val html = runCatching {
-            app.get(articleUrl, headers = baseHeaders).text
+            app.get(articleUrl, headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: return false
         val players = parseEpisodeBlocks(html)[epNum] ?: return false
         if (players.isEmpty()) return false

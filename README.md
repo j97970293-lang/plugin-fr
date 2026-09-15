@@ -1,6 +1,6 @@
 # Plugin fr · Dépôt d'extensions CloudStream
 
-**13 extensions françaises** (films, séries, animes, TV live) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
+**14 extensions françaises** (films, séries, animes, TV live) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
 
 | Extension | Site | Contenu |
 |---|---|---|
@@ -17,6 +17,7 @@
 | **CineStreamProvider** | cinestream.info | films VF/VOSTFR — 15 lecteurs par titre |
 | **PurstreamProvider** | purstream.ad | films & séries — flux HLS directs |
 | **UnJour1FilmProvider** | 1jour1film0826b.website | films & séries VF/VOSTFR (8 400+ titres) |
+| **TeleFranceProvider** | iptv-org (GitHub) | **TV française en direct** — 200+ chaînes (info, cinéma, sport, enfants…) |
 
 ## Installation
 
@@ -28,7 +29,7 @@
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
 - repo.json : `https://x0.at/86XM.json`
-- plugins.json (liste des 13 extensions) : `https://x0.at/F4NU.json`
+- plugins.json (liste des 14 extensions) : `https://x0.at/F4NU.json`
 - AnimeSama v5 : `https://x0.at/k6Dg.cs3` · AnimeSite v4 : `https://x0.at/y0UX.cs3` · Purstream v4 : `https://x0.at/Yl9o.cs3` · 1JOUR1FILM v4 : `https://x0.at/G03t.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.

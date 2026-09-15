@@ -44,6 +44,7 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newAnimeLoadResponse
 import com.lagradost.cloudstream3.newAnimeSearchResponse
@@ -131,6 +132,12 @@ class AnimeSiteProvider : MainAPI() {
         mainUrl = currentUrl()
     }
 
+    // Site derrière Cloudflare : selon le réseau, la 1re requête peut être
+    // défiée. L'intercepteur résout le défi via WebView (automatique pour les
+    // challenges JS, un clic pour Turnstile) puis rejoue la requête avec le
+    // cookie cf_clearance — les suivantes passent seules.
+    private val cfKiller by lazy { CloudflareKiller() }
+
     private fun headers(referer: String = "$mainUrl/") = mapOf(
         "User-Agent" to USER_AGENT,
         "Accept" to "application/json, text/plain, */*",
@@ -151,7 +158,7 @@ class AnimeSiteProvider : MainAPI() {
         syncUrl()
         val url = "$mainUrl/api/medias?name=${request.data}&page=$page"
         val items = runCatching {
-            AppUtils.parseJson<List<AsMedia>>(app.get(url, headers = headers()).text)
+            AppUtils.parseJson<List<AsMedia>>(app.get(url, headers = headers(), interceptor = cfKiller).text)
         }.getOrDefault(emptyList())
         if (items.isEmpty()) return newHomePageResponse(request, emptyList(), false)
         val results = items.mapNotNull { it.toSearchResponse() }
@@ -167,7 +174,7 @@ class AnimeSiteProvider : MainAPI() {
         if (q.isEmpty()) return emptyList()
         val url = "$mainUrl/search/" + java.net.URLEncoder.encode(q, "UTF-8").replace("+", "%20")
         val html = runCatching {
-            app.get(url, headers = headers("$mainUrl/search")).text
+            app.get(url, headers = headers("$mainUrl/search"), interceptor = cfKiller).text
         }.getOrNull() ?: return emptyList()
         val flight = rscFlight(html)
         val medias = Regex(""""medias":\[(.*?)]""", RegexOption.DOT_MATCHES_ALL)
@@ -228,7 +235,7 @@ class AnimeSiteProvider : MainAPI() {
             // double vérification : un autre appel a pu finir pendant l'attente
             slugIndex?.takeIf { it.first == mainUrl }?.let { return it.second[tvdbId] ?: slugify(title) }
             runCatching {
-                val xml = app.get("$mainUrl/sitemap.xml", headers = headers()).text
+                val xml = app.get("$mainUrl/sitemap.xml", headers = headers(), interceptor = cfKiller).text
                 Regex("""<loc>https?://[^<]+/(\d{5,9})-([a-z0-9-]+)</loc>""")
                     .findAll(xml)
                     .associate { it.groupValues[1].toInt() to "${it.groupValues[1]}-${it.groupValues[2]}" }
@@ -254,7 +261,7 @@ class AnimeSiteProvider : MainAPI() {
         syncUrl()
         val idAndSlug = url.trimEnd('/').substringAfterLast('/')
         val html = runCatching {
-            app.get("$mainUrl/$idAndSlug", headers = headers("$mainUrl/")).text
+            app.get("$mainUrl/$idAndSlug", headers = headers("$mainUrl/"), interceptor = cfKiller).text
         }.getOrNull() ?: throw ErrorLoadingException("Fiche inaccessible")
 
         val flight = rscFlight(html)
@@ -371,7 +378,8 @@ class AnimeSiteProvider : MainAPI() {
                     "episodeNumber" to episode,
                     "playerIndex" to playerIndex
                 ),
-                headers = headers(referer)
+                headers = headers(referer),
+                interceptor = cfKiller
             ).text
         }.getOrNull() ?: return null
         if (""""status":"ok"""" !in tokenJson) return null
@@ -387,7 +395,7 @@ class AnimeSiteProvider : MainAPI() {
         // embed : /v/{token} = page SibNet proxifiée
         val vUrl = if (src.startsWith("http")) src else "$mainUrl$src"
         val page = runCatching {
-            app.get(vUrl, headers = headers(referer)).text
+            app.get(vUrl, headers = headers(referer), interceptor = cfKiller).text
         }.getOrNull() ?: return null
         val playerSrc = Regex("""player\.src\(\[\{src:\s*"([^"]+)"""")
             .find(page)?.groupValues?.get(1) ?: return null

@@ -1,5 +1,18 @@
 # Journal des mises à jour
 
+## v8 — 2026-09-15 (résolution Cloudflare partout + TV française en direct)
+
+### 🆕 TeleFranceProvider v1 — Télé FR Direct
+- **14ᵉ extension** : 200+ chaînes de télévision françaises **en direct** (généralistes, info, cinéma, séries, divertissement, animation, enfants, sport, documentaires, musique) via les flux publics IPTV du projet iptv-org.
+- Chaînes géo-bloquées / non permanentes filtrées, logos inclus, **recherche par nom de chaîne**.
+- Réglage ⚙ : n'importe quelle playlist M3U peut être branchée (par ex. Madagascar : `iptv-org.github.io/iptv/countries/mg.m3u`).
+
+### 🛡️ Résolution Cloudflare sur TOUTES les sources (8 extensions)
+- **UnJour1Film (conservé), AnimeSama, AnimeSite, CineStream, FrenchStream, Purstream, Vostfree** reçoivent l'intercepteur **CloudflareKiller** : si le défi Cloudflare se déclenche (selon le réseau/opérateur), CloudStream ouvre un mini-navigateur qui le résout — automatiquement pour les challenges JS, en un clic pour Turnstile — puis le cookie `cf_clearance` fait passer toutes les requêtes suivantes. AnimoFlix, Flemmix, Franime, WaveWatch et Zenix l'avaient déjà ; Afterdark passe par un proxy TMDB et n'en a pas besoin.
+- C'est la réponse au « catalogue vide » de 1jour1film chez certains utilisateurs : le site est derrière Cloudflare et certains réseaux reçoivent un défi au lieu de la page.
+
+---
+
 ## v7 — 2026-09-15 (correctifs des retours v6 : réglages, recherche, diagnostics)
 
 ### 🔧 UnJour1FilmProvider v4 — le bouton réglages apparaît enfin

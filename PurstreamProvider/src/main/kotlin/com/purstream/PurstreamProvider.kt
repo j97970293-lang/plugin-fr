@@ -11,6 +11,7 @@ import com.lagradost.cloudstream3.ShowStatus
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
@@ -146,6 +147,12 @@ class PurstreamProvider : MainAPI() {
     private fun syncUrl() {
         mainUrl = currentUrl()
     }
+
+    // Site derrière Cloudflare : selon le réseau, la 1re requête peut être
+    // défiée. L'intercepteur résout le défi via WebView (automatique pour les
+    // challenges JS, un clic pour Turnstile) puis rejoue la requête avec le
+    // cookie cf_clearance — les suivantes passent seules.
+    private val cfKiller by lazy { CloudflareKiller() }
 
     private val apiHeaders get() = mapOf(
         "User-Agent" to USER_AGENT,
@@ -467,7 +474,7 @@ class PurstreamProvider : MainAPI() {
     private val mapper by lazy { com.fasterxml.jackson.databind.ObjectMapper() }
 
     private suspend fun getJson(path: String): JsonNode? =
-        runCatching { mapper.readTree(app.get(currentApi() + path, headers = apiHeaders).text) }.getOrNull()
+        runCatching { mapper.readTree(app.get(currentApi() + path, headers = apiHeaders, interceptor = cfKiller).text) }.getOrNull()
 
     private fun JsonNode.toSearchResponse(): SearchResponse? {
         val id = path("id").asInt(0)

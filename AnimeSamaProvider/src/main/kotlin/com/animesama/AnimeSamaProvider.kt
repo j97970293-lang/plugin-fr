@@ -13,6 +13,7 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newAnimeLoadResponse
 import com.lagradost.cloudstream3.newAnimeSearchResponse
@@ -155,6 +156,12 @@ class AnimeSamaProvider : MainAPI() {
         mainUrl = currentUrl()
     }
 
+    // Site derrière Cloudflare : selon le réseau, la 1re requête peut être
+    // défiée. L'intercepteur résout le défi via WebView (automatique pour les
+    // challenges JS, un clic pour Turnstile) puis rejoue la requête avec le
+    // cookie cf_clearance — les suivantes passent seules.
+    private val cfKiller by lazy { CloudflareKiller() }
+
     private val baseHeaders get() = mapOf(
         "User-Agent" to USER_AGENT,
         "Accept-Language" to "fr-FR,fr;q=0.9"
@@ -180,7 +187,7 @@ class AnimeSamaProvider : MainAPI() {
         when (request.data) {
             "catalogue" -> {
                 val html = runCatching {
-                    app.get(currentUrl() + "/catalogue/", headers = baseHeaders).text
+                    app.get(currentUrl() + "/catalogue/", headers = baseHeaders, interceptor = cfKiller).text
                 }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
                 return newHomePageResponse(request, parseCatalogue(html), hasNext = false)
             }
@@ -190,7 +197,7 @@ class AnimeSamaProvider : MainAPI() {
             }
             "planning" -> {
                 val html = runCatching {
-                    app.get(currentUrl() + "/planning/", headers = baseHeaders).text
+                    app.get(currentUrl() + "/planning/", headers = baseHeaders, interceptor = cfKiller).text
                 }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
                 val cards = parseRecentCards(html)
                     .distinctBy { it.slug }
@@ -223,7 +230,7 @@ class AnimeSamaProvider : MainAPI() {
         val cached = homeCache
         if (cached != null && System.currentTimeMillis() - cached.first < 60_000L) return cached.second
         val html = runCatching {
-            app.get(currentUrl() + "/", headers = baseHeaders).text
+            app.get(currentUrl() + "/", headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: return null
         homeCache = System.currentTimeMillis() to html
         return html
@@ -277,7 +284,8 @@ class AnimeSamaProvider : MainAPI() {
                     "X-Requested-With" to "XMLHttpRequest",
                     "Origin" to currentUrl()
                 ),
-                data = mapOf("query" to q)
+                data = mapOf("query" to q),
+                interceptor = cfKiller
             ).text
         }.getOrNull()
         val out = mutableListOf<SearchResponse>()
@@ -300,7 +308,7 @@ class AnimeSamaProvider : MainAPI() {
         if (out.isEmpty()) {
             runCatching {
                 val eq = java.net.URLEncoder.encode(q, "UTF-8")
-                app.get("${currentUrl()}/catalogue/?search=$eq", headers = baseHeaders).text
+                app.get("${currentUrl()}/catalogue/?search=$eq", headers = baseHeaders, interceptor = cfKiller).text
             }.getOrNull()?.let { out += parseCatalogue(it) }
         }
         return out.distinctBy { it.url }
@@ -334,7 +342,7 @@ class AnimeSamaProvider : MainAPI() {
         syncUrl()
         val slug = url.trimEnd('/').substringAfterLast('/')
         val html = runCatching {
-            app.get("$mainUrl/catalogue/$slug/", headers = baseHeaders).text
+            app.get("$mainUrl/catalogue/$slug/", headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: throw ErrorLoadingException("Fiche inaccessible")
 
         val doc = Jsoup.parse(html)
@@ -510,7 +518,7 @@ class AnimeSamaProvider : MainAPI() {
      *  null = erreur réseau (à retenter) ; 0 = page sans episodes.js (ex. VF absent). */
     private suspend fun countEpisodes(seasonUrl: String): Int? {
         val html = runCatching {
-            app.get(seasonUrl, headers = baseHeaders).text
+            app.get(seasonUrl, headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: return null
         val hasJs = Regex("""src=['"][^'"]*episodes\.js""").containsMatchIn(html)
         val arrays = fetchEpsArrays(seasonUrl, html)
@@ -528,7 +536,7 @@ class AnimeSamaProvider : MainAPI() {
             else -> seasonUrl.trimEnd('/') + "/" + src
         }
         val js = runCatching {
-            app.get(jsUrl, headers = baseHeaders, referer = seasonUrl).text
+            app.get(jsUrl, headers = baseHeaders, referer = seasonUrl, interceptor = cfKiller).text
         }.getOrNull() ?: return emptyMap()
         val out = mutableMapOf<String, List<String>>()
         Regex("""var\s+(eps\d+)\s*=\s*\[(.*?)\];""", RegexOption.DOT_MATCHES_ALL).findAll(js).forEach { em ->
@@ -555,7 +563,7 @@ class AnimeSamaProvider : MainAPI() {
 
         val seasonUrl = "$mainUrl/catalogue/$slug/${path.trim('/')}/"
         val html = runCatching {
-            app.get(seasonUrl, headers = baseHeaders).text
+            app.get(seasonUrl, headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: return false
         val arrays = fetchEpsArrays(seasonUrl, html)
         if (arrays.isEmpty()) return false

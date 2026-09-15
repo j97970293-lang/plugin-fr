@@ -20,6 +20,7 @@ import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.JsUnpacker
@@ -118,6 +119,12 @@ class UnJour1FilmProvider : MainAPI() {
 
     private val mapper by lazy { com.fasterxml.jackson.databind.ObjectMapper() }
 
+    // Site derrière Cloudflare : selon le réseau, la 1re requête peut être
+    // défiée. L'intercepteur résout le défi via WebView (automatique pour les
+    // challenges JS, un clic pour Turnstile) puis rejoue la requête avec le
+    // cookie cf_clearance — les requêtes suivantes passent seules.
+    private val cfKiller by lazy { CloudflareKiller() }
+
     private fun syncUrl() {
         mainUrl = currentUrl()
     }
@@ -161,7 +168,7 @@ class UnJour1FilmProvider : MainAPI() {
         if (request.data == "sorties") {
             if (page > 1) return newHomePageResponse(request, emptyList(), false)
             val html = runCatching {
-                app.get("$mainUrl/dernieres-sorties/", headers = baseHeaders).text
+                app.get("$mainUrl/dernieres-sorties/", headers = baseHeaders, interceptor = cfKiller).text
             }.getOrNull()
             val cards = html?.let { parseCards(it) } ?: emptyList()
             if (cards.isNotEmpty()) return newHomePageResponse(request, cards, hasNext = false)
@@ -200,7 +207,8 @@ class UnJour1FilmProvider : MainAPI() {
                 "search" to search,
                 "page" to page.toString()
             ),
-            headers = ajaxHeaders("$mainUrl/catalogue-films/")
+            headers = ajaxHeaders("$mainUrl/catalogue-films/"),
+            interceptor = cfKiller
         ).text
         val root = runCatching { mapper.readTree(text) }.getOrNull() ?: return 1 to ""
         if (!root.path("success").asBoolean(false)) return 1 to ""
@@ -214,7 +222,7 @@ class UnJour1FilmProvider : MainAPI() {
      */
     private suspend fun restCards(type: String, page: Int): Pair<List<SearchResponse>, Boolean> {
         val root = runCatching {
-            mapper.readTree(app.get("$mainUrl/wp-json/wp/v2/$type?per_page=60&page=$page", headers = baseHeaders).text)
+            mapper.readTree(app.get("$mainUrl/wp-json/wp/v2/$type?per_page=60&page=$page", headers = baseHeaders, interceptor = cfKiller).text)
         }.getOrNull() ?: return emptyList<SearchResponse>() to false
         if (!root.isArray) return emptyList<SearchResponse>() to false
         val out = mutableListOf<SearchResponse>()
@@ -288,7 +296,7 @@ class UnJour1FilmProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         syncUrl()
         val html = runCatching {
-            app.get(url, headers = baseHeaders).text
+            app.get(url, headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: throw ErrorLoadingException(
             "Fiche inaccessible — si le problème persiste, changez l'adresse du site dans les réglages de l'extension (⚙)."
         )
@@ -310,7 +318,7 @@ class UnJour1FilmProvider : MainAPI() {
 
             val episodes = mutableListOf<Episode>()
             seasonLinks.forEachIndexed { seasonIdx, seasonUrl ->
-                val seasonHtml = runCatching { app.get(seasonUrl, headers = baseHeaders).text }.getOrNull() ?: return@forEachIndexed
+                val seasonHtml = runCatching { app.get(seasonUrl, headers = baseHeaders, interceptor = cfKiller).text }.getOrNull() ?: return@forEachIndexed
                 val sScripts = decodeInlineScripts(seasonHtml)
                 val seasonId = sScripts.firstNotNullOfOrNull { s ->
                     Regex("""J1F_SEASON_ID\s*=\s*(\d+)""").find(s)?.groupValues?.get(1)
@@ -475,7 +483,7 @@ class UnJour1FilmProvider : MainAPI() {
                 // agrégateur apiwiflix : liens hébergeurs avec langue
                 val agg: List<com.fasterxml.jackson.databind.JsonNode> = runCatching {
                     val url = if (seasonNum != null) "https://apis.wavewatch.top/apiwiflix.php?id=$tmdbId&season=$seasonNum&episode=$epNum" else "https://apis.wavewatch.top/apiwiflix.php?id=$tmdbId"
-                    val html = app.get(url, headers = baseHeaders).text
+                    val html = app.get(url, headers = baseHeaders, interceptor = cfKiller).text
                     val m = Regex("""allSources\s*=\s*(\[.*?\])\s*;""", RegexOption.DOT_MATCHES_ALL).find(html)
                         ?: return@runCatching emptyList()
                     val node = runCatching { mapper.readTree(m.groupValues[1]) }.getOrNull()
@@ -522,7 +530,8 @@ class UnJour1FilmProvider : MainAPI() {
         val text = app.post(
             "$mainUrl/wp-admin/admin-ajax.php",
             data = mapOf("action" to "j1f_get_nonce"),
-            headers = ajaxHeaders("$mainUrl/")
+            headers = ajaxHeaders("$mainUrl/"),
+            interceptor = cfKiller
         ).text
         mapper.readTree(text).path("data").path("nonce").asText(null)?.takeIf { it.isNotBlank() }
     }.getOrNull()
@@ -532,7 +541,8 @@ class UnJour1FilmProvider : MainAPI() {
         val text = app.post(
             "$mainUrl/wp-admin/admin-ajax.php",
             data = params,
-            headers = ajaxHeaders("$mainUrl/")
+            headers = ajaxHeaders("$mainUrl/"),
+            interceptor = cfKiller
         ).text
         val root = mapper.readTree(text)
         if (!root.path("success").asBoolean(false)) return@runCatching null

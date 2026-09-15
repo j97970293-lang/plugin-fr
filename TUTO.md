@@ -506,6 +506,23 @@ n'est pas faite. AnimeSama (v3) avait le bon pattern.
 3. `syncUrl()` (`mainUrl = currentUrl()`) en tête de CHAQUE override
    (getMainPage/search/load/loadLinks), + invalider les caches indexés par URL.
 
+### 4.3b CLOUDFLARE PAR RÉSEAU : CloudflareKiller sur toutes les requêtes du site (v8)
+
+**Problème constaté** : un site peut répondre 200 depuis un réseau et servir un
+défi Cloudflare depuis un autre (opérateur/pays) → catalogues vides chez
+l'utilisateur alors que tous les tests passent. Symptôme typique : 403 avec
+`server: cloudflare` pour les user-agents non-navigateurs (okhttp, curl).
+
+**Solution** : `private val cfKiller by lazy { CloudflareKiller() }` +
+`interceptor = cfKiller` sur **toutes** les requêtes vers le domaine du site
+(GET **et** POST ; PAS les autres domaines — embeds Vidara/Lulustream, agrégateurs —
+pour ne pas mélanger les cookies de clearance). Au 1er défi, WebView résout
+(JS auto, Turnstile = 1 clic), le cookie est mémorisé pour la session.
+
+**Règle** : un déploiement « fonctionne chez moi » ne prouve rien — si le site
+est derrière Cloudflare, mettre l'intercepteur DÈS la v1, pas après 3 retours
+utilisateurs.
+
 ### 4.4 POST bloqué ≠ GET bloqué : toujours un fallback GET (v7)
 
 **Problème constaté** : la recherche AnimeSama (POST `fetch.php`) échouait
@@ -556,6 +573,20 @@ et les conventions divergent partout.
 9. CF : passer `CloudflareKiller()` en interceptor sur les requêtes animoflix.
 
 ---
+
+### 4.6 TV EN DIRECT via playlist M3U publique (TeleFrance v1)
+
+Quand les nouveaux « sites de streaming » sont des fermes à publicités (faux
+lecteurs, /go.php — papystreaming.fr, blablastream.fr, cpasmal.fr, choupox.org
+sont du même gabarit), les **playlists IPTV publiques** (iptv-org, GitHub
+Pages, aucune protection) offrent une source stable et légale de TV en direct :
+- `iptv-org.github.io/iptv/countries/{code}.m3u` : #EXTINF avec tvg-logo +
+  group-title, ~215 chaînes pour fr.m3u (~65 % vivantes à un instant T).
+- Filtrer `[Geo-blocked]` / `[Not 24/7]` et les noms parasites (certains
+  contiennent des user-agents…), nettoyer `(1080p)` du nom affiché.
+- CloudStream : `newLiveSearchResponse` + `newLiveStreamLoadResponse` +
+  `ExtractorLinkType.M3U8` direct — cf. WaveWatch (chaînes live) et
+  TeleFrance (M3U). Réglage ⚙ = URL de playlist → n'importe quelle liste.
 
 ## 5. PIÈGES RENCONTRÉS (leçons réelles)
 

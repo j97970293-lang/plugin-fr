@@ -10,6 +10,7 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
@@ -170,6 +171,12 @@ class CineStreamProvider : MainAPI() {
         mainUrl = currentUrl()
     }
 
+    // Site derrière Cloudflare : selon le réseau, la 1re requête peut être
+    // défiée. L'intercepteur résout le défi via WebView (automatique pour les
+    // challenges JS, un clic pour Turnstile) puis rejoue la requête avec le
+    // cookie cf_clearance — les suivantes passent seules.
+    private val cfKiller by lazy { CloudflareKiller() }
+
     private val baseHeaders get() = mapOf(
         "User-Agent" to USER_AGENT,
         "Accept-Language" to "fr-FR,fr;q=0.9"
@@ -210,7 +217,7 @@ class CineStreamProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
         val html = runCatching {
-            app.get(pageUrl(request.data, page), headers = baseHeaders).text
+            app.get(pageUrl(request.data, page), headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
         val items = parseCards(html)
         // 24 cartes par page sur ce site — en dessous, c'est la fin de la liste.
@@ -222,7 +229,8 @@ class CineStreamProvider : MainAPI() {
         val html = runCatching {
             app.get(
                 currentUrl() + "/search?q=" + java.net.URLEncoder.encode(query, "UTF-8"),
-                headers = baseHeaders
+                headers = baseHeaders,
+                interceptor = cfKiller
             ).text
         }.getOrNull() ?: return emptyList()
         return parseCards(html)
@@ -255,7 +263,7 @@ class CineStreamProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         syncUrl()
         val html = runCatching {
-            app.get(url, headers = baseHeaders).text
+            app.get(url, headers = baseHeaders, interceptor = cfKiller).text
         }.getOrNull() ?: throw ErrorLoadingException("Fiche CineStream inaccessible")
 
         // Titre : <meta property="og:title" content="Film {titre} {année} en Streaming">
@@ -291,7 +299,7 @@ class CineStreamProvider : MainAPI() {
     ): Boolean {
         syncUrl()
         val ficheUrl = data.substringBefore("?")
-        val html = runCatching { app.get(ficheUrl, headers = baseHeaders).text }.getOrNull()
+        val html = runCatching { app.get(ficheUrl, headers = baseHeaders, interceptor = cfKiller).text }.getOrNull()
             ?: return false
 
         // tmdbid caché dans le payload RSC (\"tmdbid\":1368337)
@@ -314,7 +322,7 @@ class CineStreamProvider : MainAPI() {
                         // /player/{tmdbid}/{index} → <iframe src="URL hébergeur">
                         val playerUrl = "$mainUrl/player/$tmdbId/$idx"
                         val page = runCatching {
-                            app.get(playerUrl, referer = ficheUrl, headers = baseHeaders).text
+                            app.get(playerUrl, referer = ficheUrl, headers = baseHeaders, interceptor = cfKiller).text
                         }.getOrNull() ?: return@async
                         val embed = Regex("""<iframe[^>]*src="([^"]+)"""").find(page)?.groupValues?.get(1)
                             ?: return@async
