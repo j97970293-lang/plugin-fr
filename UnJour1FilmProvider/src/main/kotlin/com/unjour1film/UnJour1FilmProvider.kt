@@ -1,7 +1,5 @@
 package com.unjour1film
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.ErrorLoadingException
 import com.lagradost.cloudstream3.HomePageResponse
@@ -26,30 +24,32 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.JsUnpacker
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.loadExtractor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 // ===========================================================================
-// 1JOUR1FILM (1jour1film0826b.website) — WordPress + thème DooPlay personnalisé
+// 1JOUR1FILM (1jour1film0826b.website) — WordPress + admin-ajax
 // ===========================================================================
-// Analyse du site (14/09/2026) :
-//  · Catalogue : POST /wp-admin/admin-ajax.php action=j1f_catalogue
-//    {type: movies|tvshows, search, page, tri} → {html (cartes TMDB),
-//    total, pages} — 8 418 films / 1 269 séries.
-//  · Dernières sorties : page /dernieres-sorties/ (60 cartes).
-//  · Page film : les URL réelles des sources ne sont PAS dans le HTML ;
-//    elles viennent de POST action=j1f_get_source&nonce&post_id&idx
-//    → {url, type:mp4|iframe}. Le post_id et les libellés (J1F_SRV,
-//    J1F_POST_ID) sont dans des scripts inline encodés en base64.
-//  · Page série : liens class="season-card" vers /saisons/{slug}/.
-//    Chaque page saison embarque (base64) J1F_SEASON_ID et j1fEpsData =
-//    [{id, num, label, backdrop, servers:[…]}] — les sources d'épisode
-//    viennent de action=j1f_get_ep_source&nonce&season_id&ep_id&idx.
-//  · Nonce : POST action=j1f_get_nonce → data.nonce (jetet à chaque session).
-//  · Hébergeurs observés :
-//      · vidara.to/e/{code} → POST https://vidara.to/api/stream
-//        {"filecode","device":"web"} → streaming_url (m3u8 HLS).
-//      · luluvdo.com/e/{code} (Lulustream) → JS packé (p,a,c,k,e,d) →
-//        sources:[{file:"…master.m3u8"}].
-//      · autres iframes génériques → ignorés (non extractibles).
+// Analyse du site (15/09/2026) :
+//  · Cartes : <a class="j1f-card" href="/films/{slug}/"> avec img poster.
+//  · Catalogue : POST admin-ajax action=j1f_catalogue {type, page, search…}
+//    → {data:{pages, html}} (8 423 films + séries).
+//  · Fallback REST : GET /wp-json/wp/v2/{movies|tvshows}?per_page=60&page=N
+//    (X-WP-Total: 8423) — sans poster mais toujours vivant si l'ajax change.
+//  · Fiche film : scripts inline base64 → J1F_POST_ID + ID TMDB dans
+//    « vp4-{tmdbId}- » (lecteur vp4 du site).
+//  · Page saison : /saisons/{slug}/ → J1F_SEASON_ID + j1fEpsData[] (id, num,
+//    label, backdrop TMDB) + script vp4tv « var tmdb = N; var season = M; »
+//    (4 lecteurs publics concaténés côté client).
+//  · Sources : POST j1f_get_source / j1f_get_ep_source (nonce via
+//    j1f_get_nonce) → URL Vidara/Lulustream/direct.
+//  · L'ID TMDB permet d'ajouter des lecteurs publics (Videasy, VidFast,
+//    VidSrc…) et l'agrégateur apiwiflix en serveurs supplémentaires.
 // ===========================================================================
 
 /**
@@ -58,19 +58,67 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 @CloudstreamPlugin
 class UnJour1FilmPlugin : Plugin() {
     override fun load(context: android.content.Context) {
+        UnJour1FilmProvider.appContext = context.applicationContext
         registerMainAPI(UnJour1FilmProvider())
     }
 }
 
 class UnJour1FilmProvider : MainAPI() {
 
-    override var mainUrl = "https://1jour1film0826b.website"
+    companion object {
+        const val DEFAULT_URL = "https://1jour1film0826b.website"
+
+        @Volatile
+        var appContext: android.content.Context? = null
+
+        private const val PREFS_NAME = "unjour1film_settings"
+        private const val PREF_URL = "site_url"
+
+        fun currentUrl(): String = runCatching {
+            appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                ?.getString(PREF_URL, null)
+                ?.trim()?.trimEnd('/')
+                ?.takeIf { it.startsWith("http") }
+        }.getOrNull() ?: DEFAULT_URL
+
+        fun setSiteUrl(context: android.content.Context, url: String?) {
+            context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_URL, url?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") })
+                .apply()
+        }
+
+        fun showSettings(context: android.content.Context) {
+            val input = android.widget.EditText(context).apply {
+                setText(currentUrl()); hint = "https://…"
+            }
+            val pad = (context.resources.displayMetrics.density * 20).toInt()
+            val layout = android.widget.LinearLayout(context).apply {
+                setPadding(pad, pad / 2, pad, 0)
+                addView(input)
+            }
+            android.app.AlertDialog.Builder(context)
+                .setTitle("Adresse de 1JOUR1FILM")
+                .setMessage("Le site change de domaine régulièrement (1jour1film…). Indiquez l'adresse actuelle.")
+                .setView(layout)
+                .setPositiveButton("Enregistrer") { _, _ -> setSiteUrl(context, input.text.toString()) }
+                .setNegativeButton("Annuler", null)
+                .setNeutralButton("Par défaut") { _, _ -> setSiteUrl(context, DEFAULT_URL) }
+                .show()
+        }
+    }
+
+    override var mainUrl = DEFAULT_URL
     override var name = "1JOUR1FILM"
     override val hasMainPage = true
     override var lang = "fr"
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
     private val mapper by lazy { com.fasterxml.jackson.databind.ObjectMapper() }
+
+    private fun syncUrl() {
+        mainUrl = currentUrl()
+    }
 
     private val baseHeaders = mapOf(
         "User-Agent" to USER_AGENT,
@@ -94,6 +142,7 @@ class UnJour1FilmProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        syncUrl()
         if (request.data == "sorties") {
             if (page > 1) return newHomePageResponse(request, emptyList(), false)
             val html = runCatching {
@@ -103,11 +152,15 @@ class UnJour1FilmProvider : MainAPI() {
         }
         // ⚠ request.data = la clé ("movies"/"tvshows"), request.name = le libellé
         val type = request.data // movies | tvshows
-        val root = runCatching {
-            catalogue(type, page, "")
-        }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
-        val items = parseCards(root.second)
-        val hasNext = root.first < 10_000 && items.size >= 20
+        val root = runCatching { catalogue(type, page, "") }.getOrNull()
+        val items = root?.second?.let { parseCards(it) } ?: emptyList()
+        // ---- Fallback REST si l'ajax est indisponible/vide ----
+        if (items.isEmpty()) {
+            val rest = restCards(type, page)
+            val hasNext = rest.second
+            return newHomePageResponse(request, rest.first, hasNext)
+        }
+        val hasNext = root!!.first < 10_000 && items.size >= 20
         return newHomePageResponse(request, items, hasNext)
     }
 
@@ -129,6 +182,32 @@ class UnJour1FilmProvider : MainAPI() {
         if (!root.path("success").asBoolean(false)) return 1 to ""
         val d = root.path("data")
         return d.path("pages").asInt(1) to d.path("html").asText("")
+    }
+
+    /**
+     * Fallback REST : GET /wp-json/wp/v2/{movies|tvshows} — sans posters mais
+     * insensible aux changements du protocole admin-ajax.
+     */
+    private suspend fun restCards(type: String, page: Int): Pair<List<SearchResponse>, Boolean> {
+        val root = runCatching {
+            mapper.readTree(app.get("$mainUrl/wp-json/wp/v2/$type?per_page=60&page=$page", headers = baseHeaders).text)
+        }.getOrNull() ?: return emptyList<SearchResponse>() to false
+        if (!root.isArray) return emptyList<SearchResponse>() to false
+        val out = mutableListOf<SearchResponse>()
+        root.forEach { p ->
+            val link = p.path("link").asText(null)?.takeIf { it.startsWith("http") } ?: return@forEach
+            val title = p.path("title").path("rendered").asText(null)
+                ?.replace(Regex("<[^>]+>"), "")?.trim()?.takeIf { it.isNotBlank() }
+                ?: link.trimEnd('/').substringAfterLast('/').replace('-', ' ')
+            val year = Regex("""\b(19|20)\d{2}\b""").find(p.path("dtyear").asText(""))?.value
+            val name = if (year != null) "$title ($year)" else title
+            out += if (type == "tvshows") {
+                newTvSeriesSearchResponse(name, link, TvType.TvSeries) {}
+            } else {
+                newMovieSearchResponse(name, link, TvType.Movie) {}
+            }
+        }
+        return out to (out.size >= 60)
     }
 
     /** Cartes j1f-card : <a href="…" class="j1f-card">…<img (data-|)src=poster alt=titre>… */
@@ -161,11 +240,21 @@ class UnJour1FilmProvider : MainAPI() {
     // Recherche
     // -------------------------------------------------------------------------
     override suspend fun search(query: String): List<SearchResponse> {
+        syncUrl()
         val movies = runCatching { catalogue("movies", 1, query) }.getOrNull()?.second
         val series = runCatching { catalogue("tvshows", 1, query) }.getOrNull()?.second
         val out = mutableListOf<SearchResponse>()
         movies?.let { out += parseCards(it) }
         series?.let { out += parseCards(it) }
+        if (out.isEmpty()) {
+            // fallback REST sur le terme de recherche (slug Wordpress)
+            val slug = query.lowercase().trim().replace(Regex("""[^a-z0-9]+"""), "-").trim('-')
+            if (slug.isNotBlank()) {
+                out += restCards("movies", 1).first.filter {
+                    it.name.contains(query, ignoreCase = true)
+                }
+            }
+        }
         return out.distinctBy { it.url }
     }
 
@@ -173,6 +262,7 @@ class UnJour1FilmProvider : MainAPI() {
     // Fiche
     // -------------------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse {
+        syncUrl()
         val html = runCatching {
             app.get(url, headers = baseHeaders).text
         }.getOrNull() ?: throw ErrorLoadingException("Fiche inaccessible")
@@ -182,6 +272,7 @@ class UnJour1FilmProvider : MainAPI() {
         val poster = Regex("""property="og:image" content="([^"]+)"""").find(html)?.groupValues?.get(1)
         val plot = Regex("""property="og:description" content="([^"]*)"""").find(html)?.groupValues?.get(1)?.trim()
         val year = Regex("""\((19|20)\d{2}\)""").find(title)?.value?.trim('(', ')')?.toIntOrNull()
+        val scripts = decodeInlineScripts(html)
 
         // ---- Série : saisons → épisodes ----
         if (url.contains("/tvshows/")) {
@@ -192,24 +283,31 @@ class UnJour1FilmProvider : MainAPI() {
             if (seasonLinks.isEmpty()) throw ErrorLoadingException("Aucune saison trouvée")
 
             val episodes = mutableListOf<Episode>()
-            seasonLinks.forEach { seasonUrl ->
-                val seasonHtml = runCatching { app.get(seasonUrl, headers = baseHeaders).text }.getOrNull() ?: return@forEach
-                val scripts = decodeInlineScripts(seasonHtml)
-                val seasonId = scripts.firstNotNullOfOrNull { s ->
+            seasonLinks.forEachIndexed { seasonIdx, seasonUrl ->
+                val seasonHtml = runCatching { app.get(seasonUrl, headers = baseHeaders).text }.getOrNull() ?: return@forEachIndexed
+                val sScripts = decodeInlineScripts(seasonHtml)
+                val seasonId = sScripts.firstNotNullOfOrNull { s ->
                     Regex("""J1F_SEASON_ID\s*=\s*(\d+)""").find(s)?.groupValues?.get(1)
-                } ?: return@forEach
+                } ?: return@forEachIndexed
                 val seasonNum = Regex("""[Ss]aison\s*(\d+)""").find(
                     Regex("""<title>([^<]+)</title>""").find(seasonHtml)?.groupValues?.get(1) ?: ""
-                )?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
-                val epsData = scripts.firstNotNullOfOrNull { s ->
+                )?.groupValues?.get(1)?.toIntOrNull() ?: (seasonIdx + 1)
+                // ID TMDB + numéro de saison réels (lecteur vp4tv du site)
+                val tmdbId = sScripts.firstNotNullOfOrNull { s ->
+                    Regex("""var\s+tmdb\s*=\s*(\d+)\s*;""").find(s)?.groupValues?.get(1)?.toIntOrNull()
+                } ?: 0
+                val realSeason = sScripts.firstNotNullOfOrNull { s ->
+                    Regex("""var\s+season\s*=\s*(\d+)\s*;""").find(s)?.groupValues?.get(1)?.toIntOrNull()
+                } ?: seasonNum
+                val epsData = sScripts.firstNotNullOfOrNull { s ->
                     Regex("""j1fEpsData\s*=\s*(\[.*?\]);""", RegexOption.DOT_MATCHES_ALL).find(s)
                         ?.groupValues?.get(1)?.let { runCatching { mapper.readTree(it) }.getOrNull() }
-                } ?: return@forEach
+                } ?: return@forEachIndexed
                 epsData.forEach { ep ->
                     val epId = ep.path("id").asInt(0)
                     val num = ep.path("num").asText("").toIntOrNull() ?: return@forEach
                     if (epId > 0) {
-                        episodes += newEpisode("j1fe:$seasonId:$epId") {
+                        episodes += newEpisode("j1fe:$seasonId:$epId:$tmdbId:$realSeason:$num") {
                             this.season = seasonNum
                             this.episode = num
                             this.name = ep.path("label").asText(null)?.takeIf { it.isNotBlank() }
@@ -229,10 +327,14 @@ class UnJour1FilmProvider : MainAPI() {
         }
 
         // ---- Film ----
-        val postId = decodeInlineScripts(html).firstNotNullOfOrNull { s ->
+        val postId = scripts.firstNotNullOfOrNull { s ->
             Regex("""J1F_POST_ID\s*=\s*(\d+)""").find(s)?.groupValues?.get(1)
         } ?: throw ErrorLoadingException("Identifiant du film introuvable")
-        return newMovieLoadResponse(title, url, TvType.Movie, "j1fm:$postId") {
+        // ID TMDB du lecteur vp4 (« vp4-{tmdbId}- » dans le script)
+        val tmdbId = scripts.firstNotNullOfOrNull { s ->
+            Regex("""vp4-(\d+)-""").find(s)?.groupValues?.get(1)
+        }?.toIntOrNull() ?: 0
+        return newMovieLoadResponse(title, url, TvType.Movie, "j1fm:$postId:$tmdbId") {
             this.posterUrl = poster
             this.plot = plot
             this.year = year
@@ -254,16 +356,24 @@ class UnJour1FilmProvider : MainAPI() {
     // -------------------------------------------------------------------------
     // Lecture
     // -------------------------------------------------------------------------
+    // data = j1fm:{postId}[:{tmdbId}]
+    //      | j1fe:{seasonId}:{epId}:{tmdbId}:{seasonNum}
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        syncUrl()
         val nonce = getNonce() ?: return false
+        var tmdbId = 0
+        var seasonNum: Int? = null
+        var epNum = 1
         val urls: List<String> = when {
             data.startsWith("j1fm:") -> {
-                val postId = data.removePrefix("j1fm:")
+                val parts = data.removePrefix("j1fm:").split(":")
+                val postId = parts[0]
+                tmdbId = parts.getOrNull(1)?.toIntOrNull() ?: 0
                 (0 until 6).mapNotNull { idx ->
                     fetchSource(
                         mapOf(
@@ -276,6 +386,9 @@ class UnJour1FilmProvider : MainAPI() {
             data.startsWith("j1fe:") -> {
                 val parts = data.removePrefix("j1fe:").split(":")
                 if (parts.size < 2) return false
+                tmdbId = parts.getOrNull(2)?.toIntOrNull() ?: 0
+                seasonNum = parts.getOrNull(3)?.toIntOrNull()
+                epNum = parts.getOrNull(4)?.toIntOrNull() ?: 1
                 (0 until 4).mapNotNull { idx ->
                     fetchSource(
                         mapOf(
@@ -289,6 +402,92 @@ class UnJour1FilmProvider : MainAPI() {
         }
         var found = false
         urls.forEach { u -> if (extract(u, callback)) found = true }
+
+        // ---- Serveurs supplémentaires (lecteurs publics TMDB + apiwiflix) ----
+        if (tmdbId > 0) {
+            val produced = java.util.concurrent.atomic.AtomicInteger(0)
+            runCatching {
+                val tmdb = tmdbId.toString()
+                val embeds = buildList {
+                    add(
+                        if (seasonNum != null)
+                            "https://player.videasy.net/tv/$tmdb/$seasonNum/$epNum?overlay=true&color=8B5CF6&nextEpisode=true&episodeSelector=true" to "Videasy"
+                        else "https://player.videasy.net/movie/$tmdb?overlay=true&color=8B5CF6" to "Videasy"
+                    )
+                    add(
+                        if (seasonNum != null)
+                            "https://frembed.skin/embed/serie/$tmdb?sa=$seasonNum&epi=$epNum" to "Frembed"
+                        else "https://frembed.skin/embed/movie/$tmdb" to "Frembed"
+                    )
+                    add(
+                        if (seasonNum != null)
+                            "https://peachify.top/embed/tv/$tmdb/$seasonNum/$epNum?dub=French&sub=French&autoNext=30" to "Peachify"
+                        else "https://peachify.top/embed/movie/$tmdb?dub=French&sub=French" to "Peachify"
+                    )
+                    addAll(
+                        if (seasonNum != null) listOf(
+                            "https://vidfast.pro/tv/$tmdb/$seasonNum/$epNum?autoPlay=true&sub=fr" to "VidFast",
+                            "https://vidsrc.cc/v2/embed/tv/$tmdb/$seasonNum/$epNum" to "VidSrc.cc",
+                            "https://www.vidsrc.wtf/api/2/tv/?id=$tmdb&s=$seasonNum&e=$epNum" to "VidSrc.wtf",
+                            "https://www.2embed.cc/embedtv/$tmdb&s=$seasonNum&e=$epNum" to "2Embed",
+                            "https://111movies.com/tv/$tmdb/$seasonNum/$epNum" to "111Movies",
+                            "https://www.braflix.win/watch/$tmdb?s=$seasonNum&e=$epNum" to "Braflix",
+                            "https://www.vidking.net/embed/tv/$tmdb/$seasonNum/$epNum?autoPlay=true" to "VidKing",
+                            "https://vidnest.fun/tv/$tmdb/$seasonNum/$epNum" to "VidNest"
+                        ) else listOf(
+                            "https://vidfast.pro/movie/$tmdb?autoPlay=true&sub=fr" to "VidFast",
+                            "https://vidsrc.cc/v2/embed/movie/$tmdb" to "VidSrc.cc",
+                            "https://www.vidsrc.wtf/api/3/movie/?id=$tmdb" to "VidSrc.wtf",
+                            "https://www.2embed.cc/embed/$tmdb" to "2Embed",
+                            "https://111movies.com/movie/$tmdb" to "111Movies",
+                            "https://www.braflix.win/watch/$tmdb" to "Braflix",
+                            "https://www.vidking.net/embed/movie/$tmdb?autoPlay=true" to "VidKing",
+                            "https://vidnest.fun/movie/$tmdb" to "VidNest"
+                        )
+                    )
+                }
+                // agrégateur apiwiflix : liens hébergeurs avec langue
+                val agg: List<com.fasterxml.jackson.databind.JsonNode> = runCatching {
+                    val url = if (seasonNum != null) "https://apis.wavewatch.top/apiwiflix.php?id=$tmdbId&season=$seasonNum&episode=$epNum" else "https://apis.wavewatch.top/apiwiflix.php?id=$tmdbId"
+                    val html = app.get(url, headers = baseHeaders).text
+                    val m = Regex("""allSources\s*=\s*(\[.*?\])\s*;""", RegexOption.DOT_MATCHES_ALL).find(html)
+                        ?: return@runCatching emptyList()
+                    val node = runCatching { mapper.readTree(m.groupValues[1]) }.getOrNull()
+                    if (node != null && node.isArray) node.map { it } else emptyList()
+                }.getOrDefault(emptyList())
+                val toExtract = embeds.toMutableList<Pair<String, String>>()
+                agg.forEach { s ->
+                    val u = s.path("url").asText(null)?.takeIf { it.startsWith("http") } ?: return@forEach
+                    val lang = s.path("language").asText(null)?.trim()?.uppercase()
+                        ?.replace("FRENCH", "VF")?.takeIf { it.isNotBlank() }
+                    val nm = s.path("name").asText("Lecteur")
+                    toExtract += u to (nm + (lang?.let { " · $it" } ?: ""))
+                }
+                val semaphore = Semaphore(6)
+                coroutineScope {
+                    toExtract.map { (u, label) ->
+                        async(Dispatchers.IO) {
+                            semaphore.withPermit {
+                                runCatching {
+                                    loadExtractor(u, mainUrl, { sub -> subtitleCallback(sub) }) { link ->
+                                        val nm = "1J1F+ · $label"
+                                        produced.incrementAndGet()
+                                        callback(
+                                            ExtractorLink(
+                                                nm, nm,
+                                                link.url, link.referer, link.quality,
+                                                link.headers, link.extractorData, link.type
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }.awaitAll()
+                }
+            }
+            if (produced.get() > 0) found = true
+        }
         return found
     }
 

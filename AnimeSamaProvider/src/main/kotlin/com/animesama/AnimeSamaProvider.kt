@@ -349,16 +349,10 @@ class AnimeSamaProvider : MainAPI() {
         val grouped = entries.groupBy({ it.first }, { it.second })
             .map { (name, paths) -> name to paths.distinct() }
 
-        // numéros déjà utilisés, pour garantir l'unicité
-        val used = mutableSetOf<Int>()
-        fun uniqueOrNext(base: Int): Int {
-            var n = base
-            while (n in used) n++
-            used += n
-            return n
-        }
-
-        val byName = grouped.mapIndexed { idx, (name, paths) ->
+        // Catégorise chaque panneau : 0 = saison/saga normale, 1 = film,
+        // 2 = OAV, 3 = hors-série, 4 = kai (découpage alternatif).
+        data class PaneInfo(val name: String, val paths: List<String>, val natural: Int?, val kind: Int)
+        val panes = grouped.map { (name, paths) ->
             val isKai = paths.any { it.startsWith("kai") } ||
                 Regex("""\bkai\b""", RegexOption.IGNORE_CASE).containsMatchIn(name)
             val isHs = paths.any { Regex("""saison\d+hs""").containsMatchIn(it) }
@@ -367,16 +361,29 @@ class AnimeSamaProvider : MainAPI() {
             // numéro « naturel » : Saga 3 / Saison 3 / saison3hs / kai3
             val natural = Regex("""(?:saison|season|saga|kai)\s*(\d+)""", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)?.toIntOrNull()
                 ?: paths.mapNotNull { p -> Regex("""(?:saison|kai)(\d+)""").find(p)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull()
-            val unique = when {
-                isKai -> uniqueOrNext(100 + (natural ?: idx + 1))
-                isHs -> uniqueOrNext(40 + (natural ?: idx + 1))
-                isFilm -> uniqueOrNext(90)
-                isOav -> uniqueOrNext(91)
-                natural != null -> uniqueOrNext(natural)
-                else -> uniqueOrNext(300 + idx)
-            }
-            SeasonInfo(name, paths, unique)
-        }.sortedWith(compareBy({ it.uniqueSeason >= 300 }, { it.uniqueSeason }))
+            val kind = when { isKai -> 4; isHs -> 3; isOav -> 2; isFilm -> 1; else -> 0 }
+            PaneInfo(name, paths, natural, kind)
+        }
+
+        // Numérotation séquentielle LISIBLE : les saisons normales gardent
+        // leur numéro naturel (1..N), puis films, OAV, hors-séries et kai
+        // continuent à la suite (N+1, N+2…). One Piece : 12 sagas, Films 13,
+        // OAV 14, hs 15-16, Kai 17-27 — au lieu de « Saison 100+ ». Le
+        // libellé complet (Saga/Kai/Film…) reste dans le nom de saison.
+        val sorted = panes.sortedWith(compareBy({ it.kind }, { it.natural ?: 9999 }, { it.name }))
+        val used = mutableSetOf<Int>()
+        fun takeFree(base: Int): Int {
+            var n = base
+            while (n in used) n++
+            used += n
+            return n
+        }
+        var nextSpecial = (sorted.filter { it.kind == 0 && it.natural != null }.maxOfOrNull { it.natural!! } ?: 0) + 1
+        val byName = sorted.map { p ->
+            val unique = if (p.kind == 0 && p.natural != null) takeFree(p.natural)
+            else takeFree(nextSpecial).also { nextSpecial = it + 1 }
+            SeasonInfo(p.name, p.paths, unique)
+        }.sortedBy { it.uniqueSeason }
 
         // Compte les épisodes de chaque saison (episodes.js). On limite la
         // concurrence (Semaphore) et on réessaie : en 4G, 27 requêtes d'un coup

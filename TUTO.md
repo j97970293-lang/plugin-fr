@@ -418,6 +418,15 @@ Les sites DooPlay personnalisés cachent souvent leurs données derrière
 - **Hébergeurs** : Vidara → `POST {base}/api/stream {filecode, device:"web"}`
   → `streaming_url` (m3u8) ; Lulustream (`luluvdo.com`) → JS packé →
   `JsUnpacker(page).takeIf { it.detect() }?.unpack()` puis `file:"…m3u8"`.
+- **ID TMDB caché** (v3) : le lecteur `vp4` du site embarque l'ID TMDB dans le
+  script base64 — films : `vp4-{tmdbId}-` ; pages saison : `var tmdb = N; var
+  season = M;` (les 4 lecteurs publics du site sont concaténés en JS avec ces
+  variables). → sert à alimenter les lecteurs publics/apiwiflix en serveurs
+  supplémentaires (cf. section 4).
+- **Fallback REST** (v3) : si l'ajax `j1f_catalogue` meurt, le REST WordPress
+  `/wp-json/wp/v2/{movies|tvshows}?per_page=60&page=N` (X-WP-Total: 8423)
+  reste vivant — cartes sans poster mais catalogue intact. Le rechercher TOUT
+  site WordPress : `wp-json` est presque toujours ouvert.
 - **Titres français** : les API Kitsu/AniList cherchent en EN/romaji
   (« attaque des titans » → mauvais résultats). Parade Franime v2 : télécharger
   le catalogue du site lui-même (api.franime.fr/api/animes, ~11 Mo, une fois
@@ -448,7 +457,41 @@ Règles :
   dans le code, `runCatching` + redondance suffisent (ne pas « réparer »).
 - Le décodage playerix : base64 **URL_SAFE** du param `u=` de `data-url`.
 
-### 4.1 Le cas particulier des ANIMES LONGS (One Piece & co)
+### 4.1 API « seasons » incomplète → UNION avec une autre source (Purstream v3)
+
+**Problème constaté** : `media/{id}/seasons` ne renvoyait que la saison 1 pour
+certains animes (Naruto : 52 épisodes ; Shippuden : 32 sur 500) alors que
+`media/{id}/sheet` → `urls[]` (le manifeste de lecture) liste TOUT.
+
+**Solution** : épisodes = **UNION** `sheet.urls` (regex `/S(\d+)/E(\d+)/` sur les
+URLs) ∪ `seasons` (métadonnées : noms, vignettes, résumés). ⚠ La numérotation de
+`urls` peut être **CONTINUE** (Naruto S2 = E53-104) : c'est celle qu'attend
+l'endpoint `stream/{id}/episode` (S2E53 → 200, S2E1 → 404) — ne PAS renuméroter.
+
+**Règle** : avant de coder une liste d'épisodes, **sonder l'endpoint de lecture**
+avec 2 conventions (per-season vs continue) et vérifier les 404 ; croiser
+toujours 2 sources différentes quand le site en expose deux.
+
+**Limite site** : certains trous sont réels (Jujutsu Kaisen S1E3-7, Demon Slayer
+S1E15 → 404 sur TOUTES les sources) — c'est une absence côté site, pas un bug ;
+les lecteurs publics TMDB servent alors de secours.
+
+### 4.2 Numérotation de saisons unique mais LISIBLE (AnimeSama v4)
+
+**Problème constaté** : pour éviter les fusions CloudStream, les saisons
+spéciales étaient décalées à des numéros arbitraires (Kai = 101+, hs = 41+,
+films = 90) → « One Piece a 100 saisons », illisible.
+
+**Solution — séquentielle** : les saisons normales gardent leur numéro naturel
+(1..N), puis films, OAV, hors-séries et Kai continuent à N+1, N+2… (One Piece :
+12 sagas, Films 13, OAV 14, hs 15-16, Kai 17-27). Un `TreeSet` de numéros
+« utilisés » garantit l'unicité, et le libellé complet reste dans le nom de
+saison/épisode (« Kai - Saga 1 (East Blue) · Épisode 5 »).
+
+**Règle** : un numéro de saison est une clé technique UNIQUE mais affichée —
+éviter les plages magiques (100+, 300+) au profit d'une suite compacte.
+
+### 4.3 Le cas particulier des ANIMES LONGS (One Piece & co)
 
 **Problème constaté** : TMDB numérote One Piece en ABSOLU par saison
 (S23 = E1156..E1181), les agrégateurs ne l'ont pas du tout (« Serie non trouvee »),

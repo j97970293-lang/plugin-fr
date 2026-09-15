@@ -1,5 +1,23 @@
 # Journal des mises à jour
 
+## v6 — 2026-09-15 (retours utilisateur : saisons, épisodes, serveurs, réglages)
+
+### 🔧 AnimeSamaProvider v4 — numérotation des saisons enfin lisible
+- **One Piece n'affichait plus « 100+ saisons »** : les Kai étaient numérotés 101+, les hors-séries 41+, les films 90. Désormais **numérotation séquentielle** : les saisons/sagas normales gardent leur numéro (1-12), puis Films (13), Fan Letter/OAV (14), hors-séries (15-16) et Kai (17-27) continuent à la suite. Le libellé complet reste visible dans le nom de la saison et des épisodes (« Kai - Saga 1 (East Blue) · Épisode 5 »).
+
+### 🔧 PurstreamProvider v3 — épisodes complets + réglages + serveurs en plus
+- **Épisodes manquants des animes** : l'endpoint `media/{id}/seasons` est incomplet pour certains animes (Naruto : saison 1 seule, Naruto Shippuden : 32 épisodes sur 500). Les épisodes sont désormais construits par **UNION** de `media/{id}/sheet` (`urls`, numérotation continue — c'est celle qu'attend l'API stream) et de `seasons` (noms, vignettes, résumés). Naruto : **220 épisodes** (S1-S4), Shippuden : **500** (S1-S20).
+- **Serveurs supplémentaires** : le champ `tmdbId` de la fiche alimente les lecteurs publics (Videasy, Frembed, Peachify, VidFast, VidSrc.cc, VidSrc.wtf, 2Embed, 111Movies, Braflix, VidKing, VidNest) et l'agrégateur apiwiflix (langues VF/VOSTFR), en plus des flux du site.
+- **Réglages** : bouton ⚙ pour changer l'adresse du site **et** de l'API si le domaine change.
+- ⚠ Limitation site : certains épisodes sont réellement absents chez Purstream (Jujutsu Kaisen S1E3-7, Demon Slayer S1E15 → 404 côté serveur) — les lecteurs publics TMDB peuvent alors les fournir en secours.
+
+### 🔧 UnJour1FilmProvider v3 — catalogue blindé + serveurs en plus
+- **Catalogue** : fallback **REST WordPress** (`/wp-json/wp/v2/movies|tvshows`, 8 423 titres) si l'ajax `j1f_catalogue` devient indisponible — le catalogue s'affiche dans tous les cas. (Le site a été re-testé avec le user-agent exact de CloudStream : l'ajax fonctionne ; si le catalogue restait vide, c'est que la **v1** était encore installée.)
+- **Serveurs supplémentaires** : l'ID TMDB est extrait des scripts du site (`vp4-{tmdb}` pour les films, `var tmdb`/`var season` pour les saisons) → mêmes lecteurs publics + agrégateur apiwiflix que Purstream, en plus des sources Vidara/Lulustream du site.
+- **Réglages** : bouton ⚙ pour changer l'adresse du site (rotation de domaine fréquente).
+
+---
+
 ## v5 — 2026-09-15 (correctifs des retours v4)
 
 ### 🔧 AnimeSamaProvider v3

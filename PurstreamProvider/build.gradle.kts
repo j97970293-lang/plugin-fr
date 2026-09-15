@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 2
+version = 3
 
 cloudstream {
     description = "Purstream — Films et séries VF/VOSTFR en HLS direct (API purstream.ad)"
