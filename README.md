@@ -28,8 +28,8 @@
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
 - repo.json : `https://x0.at/86XM.json`
-- plugins.json (liste des 13 extensions) : `https://x0.at/ZDwk.json`
-- AnimeSama v3 : `https://x0.at/BmTb.cs3` · AnimeSite v3 : `https://x0.at/rThT.cs3` · Purstream v2 : `https://x0.at/fpS5.cs3` · 1JOUR1FILM v2 : `https://x0.at/n8MS.cs3`
+- plugins.json (liste des 13 extensions) : `https://x0.at/Q9Q4.json`
+- AnimeSama v4 : `https://x0.at/RnIC.cs3` · Purstream v3 : `https://x0.at/vamv.cs3` · 1JOUR1FILM v3 : `https://x0.at/BXE9.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.
 </details>
