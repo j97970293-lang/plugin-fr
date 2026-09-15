@@ -524,6 +524,9 @@ et les conventions divergent partout.
 | Sources servies par AJAX + nonce (WordPress) | URLs jamais dans le HTML | `admin-ajax.php` : action get_nonce puis get_source ; scripts inline **base64 data-URI** à décoder (J1F_POST_ID, j1fEpsData) |
 | Mur d'inscription avant les lecteurs (dulourd.hair) | « S'inscrire pour regarder » + reCAPTCHA | Écarter — arnaque au paiement, aucun flux réel accessible |
 | Landing page SEO sans catalogue (nakios.homes/biz) | page unique, liens vers un autre player | Écarter — vérifier qu'il existe un vrai catalogue interne |
+| **Ressource partagée téléchargée par toutes les cartes** (AnimeSite v2) | **gel de l'app puis fermeture (ANR)** à l'ouverture de l'accueil | Un sitemap/annuaire utilisé par les fiches = 1 téléchargement unique : verrou (Mutex) + double vérification + cache par session |
+| Comptage parallèle massif sur mobile (AnimeSama v2) | séries longues « incomplètes » (saisons à 1 épisode) | Semaphore(3) + relances avec délai ; distinguer erreur réseau (null → retry) de page sans contenu (0 → ne pas insister) |
+| VF absente des panneaux de la fiche (AnimeSama) | pas de piste DUB alors que le site a une VF | Sonder `{saison}/vf/` (la 1re saison d'abord, puis tout si ça répond) — les CTA de la home révèlent les langues disponibles |
 
 ---
 

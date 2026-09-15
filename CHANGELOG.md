@@ -1,6 +1,26 @@
 # Journal des mises à jour
 
-## v4 — 2026-09-14 (soir) : 13 extensions
+## v5 — 2026-09-15 (correctifs des retours v4)
+
+### 🔧 AnimeSamaProvider v3
+- **One Piece complet** : en 4G, les 27 requêtes de comptage simultanées échouaient pour la moitié des saisons (réduites à 1 épisode → ~220 visibles). Désormais : concurrence limitée à 3 + 2 relances par saison. Total réel : **1 369 épisodes** (sagas 1-12, films, OAV, hors-séries, Kai).
+- **Piste DUB (VF)** : les fiches ne listent que les panneaux VOSTFR alors que les pages `/vf/` existent (découvert via les CTA de la home) — l'extension sonde la VF et remplit le sélecteur **SUB/DUB**.
+- **Catalogue élargi** : section « Animes du planning » (~255 animes en cours) + routage des sections corrigé (`request.data`) — les 4 sections affichaient la même liste.
+
+### 🔧 AnimeSiteProvider v3 — corrige le crash à l'ouverture
+- Le sitemap (486 Ko) était téléchargé **20 fois en parallèle** (un par carte de l'accueil) → gel + fermeture de l'application (ANR). Désormais un seul téléchargement, protégé par verrou, mis en cache par session.
+
+### 🔧 PurstreamProvider v2 — corrige « la fiche ne donne rien »
+- Fiches sur de vraies URLs (`/movie/{id}`, `/serie/{id}`) au lieu du schéma interne `ps:{id}:{type}` + routage des sections corrigé.
+
+### 🔧 UnJour1FilmProvider v2 — corrige « pas de catalogue »
+- Le catalogue était interrogé avec le **libellé** de la section (« Films ») au lieu de sa clé (« movies ») → réponse vide. Corrigé.
+
+> Leçon commune : ne JAMAIS router `getMainPage` sur `request.name` (libellé affiché) mais sur `request.data` (clé) — bug déjà rencontré en v3 et réintroduit par erreur dans les 3 nouveaux providers.
+
+---
+
+## v4 — 2026-09-15 : 13 extensions
 
 ### 🆕 PurstreamProvider (v1) — purstream.ad
 - Site SPA React : API JSON ouverte `api.purstream.ad/api/v1/` découverte en reversant le bundle JS.
