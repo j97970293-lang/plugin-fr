@@ -272,28 +272,85 @@ class FlemmixProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         syncUrl()
-        // Le moteur de recherche de flemmix est neutralisé côté serveur :
-        // le POST est redirigé vers l'accueil et le GET renvoie « Bot shield
-        // active. ». On tente quand même le POST direct (au cas où le shield
-        // serait levé un jour) mais sans cfKiller et avec un délai court pour
-        // ne jamais ralentir la recherche globale de l'application.
+        // Le moteur de recherche est protégé par un « bot shield » DLE :
+        // la page d'accueil pose un cookie JS `h_check=25` (script inline
+        // `document.cookie = "h_check=" + (10+15)`) et le POST de recherche
+        // le vérifie. Sans lui → « Bot shield active. » (18 octets).
         val data = mapOf(
             "do" to "search", "subaction" to "search", "story" to query,
             "search_start" to "0", "full_search" to "0", "result_from" to "1"
         )
         val html = runCatching {
             app.post(
-                currentUrl() + "/index.php",
-                data = data, headers = baseHeaders
+                currentUrl() + "/index.php?do=search",
+                data = data,
+                headers = baseHeaders + mapOf(
+                    "Origin" to currentUrl(),
+                    "Referer" to currentUrl() + "/"
+                ),
+                cookies = mapOf("h_check" to "25")
             ).text
         }.getOrNull() ?: return emptyList()
         if (html.length < 500) return emptyList() // « Bot shield active. »
-        // Le site renvoie parfois l'accueil au lieu des résultats : on ne garde
-        // la réponse que si le terme recherché apparaît dans les titres.
-        val results = parseCards(html)
-        val q = query.lowercase()
-        return if (results.any { it.name.lowercase().contains(q) }) results else emptyList()
+        return parseSearchResults(html)
     }
+
+    /**
+     * Résultats de recherche DLE : les cartes .mov de la zone résultat.
+     * ⚠ La page contient aussi un bloc de recommandations masqué
+     * (#no-results-rec, affiché seulement si 0 résultat) AVANT les vrais
+     * résultats : on saute ce bloc (divs équilibrés) pour ne parser que
+     * les cartes pertinentes.
+     */
+    private fun parseSearchResults(html: String): List<SearchResponse> {
+        val zone = afterHiddenRecommendations(html)
+        val out = mutableListOf<SearchResponse>()
+        Regex(
+            """<div class="mov clearfix">\s*<div class="mov-i[^"]*">\s*<img[^>]+src="([^"]+)"""" +
+                """.*?<a class="mov-t nowrap" href="(https?://[^"]+/\d+-[^"]+\.html)"[^>]*>([^<]+)</a>""",
+            RegexOption.DOT_MATCHES_ALL
+        ).findAll(zone).forEach { m ->
+            val posterRaw = m.groupValues[1]
+            val poster = when {
+                posterRaw.startsWith("http") -> posterRaw
+                else -> currentUrl() + posterRaw
+            }
+            val url = m.groupValues[2]
+            val title = htmlUnescape(m.groupValues[3]).trim()
+            if (title.isBlank()) return@forEach
+            val isSeries = url.contains("/serie-en-streaming/") || url.contains("/saison-complete/") ||
+                url.contains("/vf/") || url.contains("/vostfr/")
+            out += if (isSeries) {
+                newAnimeSearchResponse(title, url, TvType.Anime) { this.posterUrl = poster }
+            } else {
+                newMovieSearchResponse(title, url, TvType.Movie) { this.posterUrl = poster }
+            }
+        }
+        return out.distinctBy { it.url }
+    }
+
+    /** Retourne le HTML situé après le bloc masqué #no-results-rec. */
+    private fun afterHiddenRecommendations(html: String): String {
+        val marker = html.indexOf("no-results-rec")
+        if (marker < 0) return html
+        val open = html.indexOf("<div", marker)
+        if (open < 0) return html
+        var depth = 0
+        val tag = Regex("""<(/?)div\b""")
+        var m = tag.find(html, open)
+        while (m != null) {
+            depth += if (m.groupValues[1].isEmpty()) 1 else -1
+            if (depth == 0) return html.substring(m.range.last + 1)
+            m = m.next()
+        }
+        return html
+    }
+
+    /** Décode les entités HTML courantes. */
+    private fun htmlUnescape(s: String): String = s
+        .replace("&amp;", "&").replace("&quot;", "\"")
+        .replace("&#039;", "'").replace("&apos;", "'")
+        .replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ")
 
     /** Cartes : <a href="…film-en-streaming/ID-slug.html"><img src="poster" alt="…"><span class="title1">Titre</span> */
     private fun parseCards(html: String): List<SearchResponse> {
@@ -362,10 +419,17 @@ class FlemmixProvider : MainAPI() {
             val allEps = (epsVs + epsVf).distinct().sorted()
             if (allEps.isNotEmpty()) {
                 val subbed = epsVs.map { n ->
-                    n to newEpisode(episodeDataUrl(url, n)) { this.episode = n }
+                    n to newEpisode(episodeDataUrl(url, n)) {
+                        this.episode = n
+                        // pas de vignette d'épisode côté site → poster de la fiche
+                        this.posterUrl = poster
+                    }
                 }
                 val dubbed = epsVf.map { n ->
-                    n to newEpisode(episodeDataUrl(url, n)) { this.episode = n }
+                    n to newEpisode(episodeDataUrl(url, n)) {
+                        this.episode = n
+                        this.posterUrl = poster
+                    }
                 }
                 val byDub = mutableMapOf<DubStatus, List<Episode>>()
                 if (subbed.isNotEmpty()) byDub[DubStatus.Subbed] = subbed.map { it.second }

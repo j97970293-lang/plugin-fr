@@ -51,6 +51,7 @@ import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
+import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.cloudstream3.utils.AppUtils
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.newExtractorLink
@@ -61,7 +62,17 @@ import kotlinx.coroutines.coroutineScope
 import java.text.Normalizer
 import java.util.concurrent.Semaphore
 
+/**
+ * Point d'entrée du plugin — c'est CETTE classe que CloudStream charge
+ * (le provider seul ne s'enregistre pas : erreur « installe mais invisible »).
+ */
 @CloudstreamPlugin
+class AnimeSitePlugin : Plugin() {
+    override fun load(context: android.content.Context) {
+        registerMainAPI(AnimeSiteProvider())
+    }
+}
+
 class AnimeSiteProvider : MainAPI() {
     override var mainUrl = "https://animesite.fr"
     override var name = "AnimeSite"
@@ -225,6 +236,8 @@ class AnimeSiteProvider : MainAPI() {
                 newEpisode(playUrl(season, ep)) {
                     this.season = season
                     this.episode = ep
+                    // pas de vignette d'épisode côté site → poster de la fiche
+                    this.posterUrl = poster
                 }
             }
         }

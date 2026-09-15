@@ -1,9 +1,9 @@
 // Use an integer for version numbers
-version = 2
+version = 3
 
 cloudstream {
     description = "Vostfree — Animes VF & VOSTFR + films (Sibnet, Uqload, Dood, Voe, Opvid…)"
-    authors = listOf("ArenaAgent")
+    authors = listOf("j97970293-lang")
     status = 1
     tvTypes = listOf("Anime", "Movie")
     language = "fr"

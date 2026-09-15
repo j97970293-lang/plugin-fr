@@ -374,6 +374,50 @@ Les sites DataLife Engine (fs27/french-stream…) ont DEUX recherches :
   page « Aucun résultat » sans carte.
   ⚠️ L'inverse existe aussi : **vostfree.ws** est un DLE où le GET marche et le
   POST renvoie l'accueil → TOUJOURS tester les deux avant de coder.
+- **Cookie anti-bot posé par la home** (flemmix v4) : le POST de recherche
+  renvoyait « Bot shield active. » (18 octets). En lisant les scripts inline de
+  la page d'accueil : `document.cookie = "h_check=" + (10+15) + ";…"` → le
+  shield vérifie le cookie **`h_check=25`**. Parade : l'envoyer avec le POST
+  (`cookies = mapOf("h_check" to "25")`). → Réflexe : quand une action AJAX est
+  bloquée, chercher TOUS les `document.cookie =` du site (cookie JS calculé).
+- **Résultats DLE pollués par des recommandations** (flemmix v4) : la page de
+  résultats contient un bloc `#no-results-rec` (recommandations masquées,
+  affichées si 0 résultat) AVANT les vraies cartes → sauter le bloc (compteur
+  de `<div>`/`</div>` équilibrés depuis le marqueur) avant de parser, sinon la
+  recherche renvoie des titres hors sujet.
+
+### 3.13 SPA React/Vue : trouver l'API cachée (purstream.ad)
+
+Une page de 2 Ko sans contenu = SPA. L'API est dans le bundle :
+1. Repérer `<script src="/assets/index-*.js">` (2 Mo, minifié).
+2. Chercher les **tables de routes** : `const Ot={discover:"/",…}` (routes web)
+   et `api_xxx:"chemin/relatif"` (routes API) — la base (`https://api…/api/v1/`)
+   est concaténée par une fonction `we()`/`fetch()`.
+3. Chercher `fetch("https://…` littéraux (ex. `api/v1/check-email`) pour
+   confirmer la base et les en-têtes attendus.
+4. Tester les endpoints au `curl` : catalogue (`catalog/movies?page=N`),
+   recherche (`search-bar/search/{q}`), fiche (`media/{id}/sheet`), sources
+   (`stream/{id}`) — si tout répond en JSON sans auth, l'extension est triviale.
+   → PurstreamProvider : HLS m3u8 directs, épisodes avec vignettes TMDB.
+
+### 3.14 WordPress/DooPlay : admin-ajax + scripts base64 (1jour1film)
+
+Les sites DooPlay personnalisés cachent souvent leurs données derrière
+`/wp-admin/admin-ajax.php` :
+- **Catalogue** : `POST action=j1f_catalogue {type, search, page, tri}` →
+  `{html, total, pages}` (cartes prêtes à parser).
+- **Sources** : jamais dans le HTML ; servies à la demande par
+  `action=j1f_get_source&nonce&post_id&idx` (film) et
+  `action=j1f_get_ep_source&nonce&season_id&ep_id&idx` (épisode), avec un
+  **nonce renouvelé** via `action=j1f_get_nonce`. Les `idx` sont séquentiels ;
+  un 404 = plus de sources (sonder 0..N).
+- **Données embarquées** : `J1F_POST_ID`, `J1F_SEASON_ID`, `J1F_SRV` (libellés)
+  et `j1fEpsData` (épisodes des saisons) vivent dans des `<script
+  src="data:text/javascript;base64,…">` → décoder avec
+  `android.util.Base64.decode(…, Base64.DEFAULT)` puis regex/JSON.
+- **Hébergeurs** : Vidara → `POST {base}/api/stream {filecode, device:"web"}`
+  → `streaming_url` (m3u8) ; Lulustream (`luluvdo.com`) → JS packé →
+  `JsUnpacker(page).takeIf { it.detect() }?.unpack()` puis `file:"…m3u8"`.
 - **Titres français** : les API Kitsu/AniList cherchent en EN/romaji
   (« attaque des titans » → mauvais résultats). Parade Franime v2 : télécharger
   le catalogue du site lui-même (api.franime.fr/api/animes, ~11 Mo, une fois
@@ -472,6 +516,14 @@ et les conventions divergent partout.
 | Anti-bot « veske.io » (purstream.ad) | player verrouillé côté serveur | Écarter — aucune parade sans navigateur |
 | Turnstile sur TOUTE la navigation (dulourd.hair) | même l'accueil exige le challenge | Écarter (CloudflareKiller ne gère pas Turnstile) |
 | Next.js RSC flight vide (animesite.fr) | loading boundaries `[]`, aucun endpoint | Scanner ≤12 chunks ; si aucune API de données → Écarter |
+| **`@CloudstreamPlugin` posé sur le provider** (AnimeSite v1) | **« installe avec erreur » puis extension INVISIBLE** (aucune classe Plugin chargée) | Toujours une classe `XxxPlugin : Plugin()` séparée qui fait `registerMainAPI(XxxProvider())` — comparer le `pluginClassName` du manifest avec un module qui marche |
+| **Fusion d'épisodes par (saison, épisode)** (AnimeSama v1, One Piece) | une série longue n'affiche que ~74 épisodes (« pas complète ») | CloudStream fusionne les épisodes de même couple (season, episode) : si les saisons du site n'ont pas de numéro (« Saga N », `saisonNhs`…), leur attribuer un numéro UNIQUE par panneau (100+N pour « Kai », 41+ pour hs, 90 films, 91 OAV…) + nom d'épisode explicite |
+| Bot shield exigeant un cookie JS | POST recherche → « Bot shield active. » | Lire les `document.cookie =` des scripts inline de la home (h_check=25 chez flemmix) et renvoyer le cookie |
+| Recommandations cachées dans les résultats | la recherche renvoie des titres hors sujet | Sauter le bloc `#no-results-rec` (divs équilibrés) avant de parser (flemmix) |
+| SPA React sans contenu HTML | page de 2 Ko, rien à scraper | Reverser le bundle : tables de routes `api_*`, `fetch("https://…")` → API JSON souvent ouverte (purstream.ad) |
+| Sources servies par AJAX + nonce (WordPress) | URLs jamais dans le HTML | `admin-ajax.php` : action get_nonce puis get_source ; scripts inline **base64 data-URI** à décoder (J1F_POST_ID, j1fEpsData) |
+| Mur d'inscription avant les lecteurs (dulourd.hair) | « S'inscrire pour regarder » + reCAPTCHA | Écarter — arnaque au paiement, aucun flux réel accessible |
+| Landing page SEO sans catalogue (nakios.homes/biz) | page unique, liens vers un autre player | Écarter — vérifier qu'il existe un vrai catalogue interne |
 
 ---
 

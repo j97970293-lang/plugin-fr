@@ -236,7 +236,11 @@ class VostfreeProvider : MainAPI() {
         }
 
         val epList = episodes.keys.sorted().map { n ->
-            n to newEpisode(dataUrl(url, n)) { this.episode = n }
+            n to newEpisode(dataUrl(url, n)) {
+                this.episode = n
+                // pas de vignette d'épisode côté site → poster de la fiche
+                this.posterUrl = poster
+            }
         }
         val dub = if (title.contains("VF", true) && !title.contains("VOSTFR", true)) DubStatus.Dubbed else DubStatus.Subbed
         return newAnimeLoadResponse(title, url, TvType.Anime) {

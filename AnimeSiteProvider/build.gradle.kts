@@ -1,8 +1,8 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "AnimeSite — Animes VF/VOSTFR, lecteurs SibNet MP4 directs, catalogues tendances/nouveautés/mieux notés"
-    authors = listOf("ArenaAgent")
+    authors = listOf("j97970293-lang")
     status = 1
     tvTypes = listOf("Anime", "AnimeMovie")
     language = "fr"

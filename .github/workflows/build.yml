@@ -69,7 +69,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/builds/repo.json << EOF
           {
             "name": "Plugin fr",
-            "description": "Extensions CloudStream FR — AnimoFlix, Zenix, WaveWatch, Afterdark, FRAnime, French Stream, Flemmix, Vostfree, Anime-Sama & CineStream (films, séries, animes, TV live) VF/VOSTFR",
+            "description": "Extensions CloudStream FR — 13 sources : AnimoFlix, Zenix, WaveWatch, Afterdark, FRAnime, French Stream, Flemmix, Vostfree, Anime-Sama, AnimeSite, CineStream, Purstream, 1JOUR1FILM (films, séries, animes, TV live) VF/VOSTFR",
             "manifestVersion": 1,
             "pluginLists": [
               "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/builds/plugins.json"

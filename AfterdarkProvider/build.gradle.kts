@@ -1,11 +1,11 @@
 // Use an integer for version numbers
-version = 5
+version = 6
 
 cloudstream {
     // All of these properties are optional, you can safely remove any of them.
 
     description = "Afterdark — Films et séries en VOSTFR (multi-serveurs)"
-    authors = listOf("ArenaAgent")
+    authors = listOf("j97970293-lang")
 
     /**
     * Status int as one of the following:

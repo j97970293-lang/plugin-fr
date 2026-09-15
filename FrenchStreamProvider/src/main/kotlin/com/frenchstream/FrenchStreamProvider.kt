@@ -321,7 +321,7 @@ class FrenchStreamProvider : MainAPI() {
             title.contains("saison", true)
 
         if (isSeries) {
-            val eps = fetchSeriesEpisodes(newsId)
+            val eps = fetchSeriesEpisodes(newsId, poster)
             if (eps.isEmpty()) throw ErrorLoadingException("Aucun épisode disponible (données de la série illisibles).")
             val byDub = eps.groupBy({ it.first }, { it.second })
                 .mapValues { (_, list) -> list.sortedBy { it.episode ?: 0 } }
@@ -376,7 +376,7 @@ class FrenchStreamProvider : MainAPI() {
     /** /static/series/{id}.js → {vf:{ep:{player:url}}, vostfr:{...}, vo:{...}} */
     private data class SeriesEp(val lang: String, val dub: DubStatus, val players: Map<String, String>)
 
-    private suspend fun fetchSeriesEpisodes(newsId: String): List<Pair<DubStatus, Episode>> {
+    private suspend fun fetchSeriesEpisodes(newsId: String, poster: String?): List<Pair<DubStatus, Episode>> {
         val js = runCatching {
             app.get("$mainUrl/static/series/$newsId.js", headers = baseHeaders).text
         }.getOrNull() ?: return emptyList()
@@ -395,6 +395,8 @@ class FrenchStreamProvider : MainAPI() {
                     out += dub to newEpisode("$mainUrl/ep?id=$newsId&lang=$langKey&ep=$n") {
                         this.episode = n
                         this.name = if (langKey == "vo") "Épisode $n (VO)" else null
+                        // pas de vignette d'épisode côté site → poster de la fiche
+                        this.posterUrl = poster
                     }
                 }
             }

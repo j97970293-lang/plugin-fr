@@ -162,18 +162,90 @@ class AnimeSamaProvider : MainAPI() {
     // -------------------------------------------------------------------------
     // Accueil & recherche
     // -------------------------------------------------------------------------
+    // Sections de la home : carrousel « Nouveautés », cartes « Derniers
+    // épisodes ajoutés » (avec badge langue) et catalogue complet.
     override val mainPage = mainPageOf(
+        "nouveautes" to "Nouveautés",
+        "vostfr" to "Derniers épisodes VOSTFR",
+        "vf" to "Derniers épisodes VF",
         "catalogue" to "Catalogue complet"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
         if (page > 1) return newHomePageResponse(request, emptyList(), false)
+        when (request.name) {
+            "catalogue" -> {
+                val html = runCatching {
+                    app.get(currentUrl() + "/catalogue/", headers = baseHeaders).text
+                }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
+                return newHomePageResponse(request, parseCatalogue(html), hasNext = false)
+            }
+            "nouveautes" -> {
+                val home = fetchHome() ?: return newHomePageResponse(request, emptyList(), false)
+                return newHomePageResponse(request, parseCarousel(home), hasNext = false)
+            }
+            else -> { // vostfr / vf
+                val wantLang = if (request.name == "vf") "vf" else "vostfr"
+                val home = fetchHome() ?: return newHomePageResponse(request, emptyList(), false)
+                val cards = parseRecentCards(home)
+                    .filter { it.lang == wantLang }
+                    .distinctBy { it.slug }
+                    .map {
+                        newAnimeSearchResponse(it.title, "$mainUrl/catalogue/${it.slug}/", TvType.Anime) {
+                            this.posterUrl = it.poster
+                        }
+                    }
+                return newHomePageResponse(request, cards, hasNext = false)
+            }
+        }
+    }
+
+    /** HTML de la page d'accueil (mise en cache par requête). */
+    private var homeCache: Pair<Long, String>? = null
+    private suspend fun fetchHome(): String? {
+        val cached = homeCache
+        if (cached != null && System.currentTimeMillis() - cached.first < 60_000L) return cached.second
         val html = runCatching {
-            app.get(currentUrl() + "/catalogue/", headers = baseHeaders).text
-        }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
-        val items = parseCatalogue(html)
-        return newHomePageResponse(request, items, hasNext = false)
+            app.get(currentUrl() + "/", headers = baseHeaders).text
+        }.getOrNull() ?: return null
+        homeCache = System.currentTimeMillis() to html
+        return html
+    }
+
+    /** Slides du carrousel d'accueil : titre + poster + langues CTA. */
+    private fun parseCarousel(html: String): List<SearchResponse> {
+        val out = mutableListOf<SearchResponse>()
+        Regex(
+            """<div class="ak-slide[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</div>\s*</div>""",
+            RegexOption.DOT_MATCHES_ALL
+        ).findAll(html).forEach { m ->
+            val seg = m.groupValues[1]
+            val title = Regex("""<h2 class="ak-slide-title">([^<]+)</h2>""").find(seg)?.groupValues?.get(1)?.trim() ?: return@forEach
+            val poster = Regex("""<div class="ak-slide-bg"><img[^>]+src="([^"]+)"""").find(seg)?.groupValues?.get(1)
+            val slug = Regex("""href="(?:https?://[^"]*)?/catalogue/([a-z0-9.-]+)/[^>]*>""")
+                .find(seg)?.groupValues?.get(1) ?: return@forEach
+            val url = "$mainUrl/catalogue/$slug/"
+            if (out.none { it.url == url }) {
+                out += newAnimeSearchResponse(htmlUnescape(title), url, TvType.Anime) { posterUrl = poster }
+            }
+        }
+        return out
+    }
+
+    /** Cartes « Derniers épisodes ajoutés » de la home. */
+    private data class RecentCard(val slug: String, val lang: String, val title: String, val poster: String?)
+
+    private fun parseRecentCards(html: String): List<RecentCard> {
+        val out = mutableListOf<RecentCard>()
+        Regex(
+            """<a href="(?:https?://[^"]*)?/catalogue/([a-z0-9.-]+)/([a-z0-9]+)/([a-z]+)/"[^>]*>\s*<div class="card-image-container">\s*<img[^>]+class="card-image"[^>]+src="([^"]+)"[^>]*alt="([^"]*)""""
+        ).findAll(html).forEach { m ->
+            val (slug, _, lang, poster, alt) = m.destructured
+            val title = htmlUnescape(alt).trim().ifBlank { slug.replace('-', ' ') }
+            out += RecentCard(slug, lang, title, poster)
+        }
+        return out
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -247,14 +319,48 @@ class AnimeSamaProvider : MainAPI() {
             .toList()
         if (entries.isEmpty()) throw ErrorLoadingException("Aucune saison trouvée sur cette fiche.")
 
-        // Regroupe par nom (Saison 1 vostfr + Saison 1 vf = une entrée)
-        data class SeasonInfo(val name: String, val paths: List<String>, val seasonNumber: Int?)
-        val byName = entries.groupBy({ it.first }, { it.second })
-            .map { (name, paths) ->
-                val num = Regex("""(?:saison|season)\s*(\d+)""", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)?.toIntOrNull()
-                SeasonInfo(name, paths.distinct(), num)
+        // Regroupe par nom (Saison 1 vostfr + Saison 1 vf = une entrée).
+        // ⚠ CloudStream fusionne les épisodes qui partagent le même couple
+        // (season, episode) : il faut donc un numéro de saison UNIQUE par
+        // panneau. « Saga N » (One Piece…), « Kai - Saga N », « saisonNhs »,
+        // « Films », « OAV » doivent être distingués.
+        data class SeasonInfo(
+            val name: String,
+            val paths: List<String>,
+            val uniqueSeason: Int     // clé unique pour CloudStream (évite les fusions)
+        )
+
+        val grouped = entries.groupBy({ it.first }, { it.second })
+            .map { (name, paths) -> name to paths.distinct() }
+
+        // numéros déjà utilisés, pour garantir l'unicité
+        val used = mutableSetOf<Int>()
+        fun uniqueOrNext(base: Int): Int {
+            var n = base
+            while (n in used) n++
+            used += n
+            return n
+        }
+
+        val byName = grouped.mapIndexed { idx, (name, paths) ->
+            val isKai = paths.any { it.startsWith("kai") } ||
+                Regex("""\bkai\b""", RegexOption.IGNORE_CASE).containsMatchIn(name)
+            val isHs = paths.any { Regex("""saison\d+hs""").containsMatchIn(it) }
+            val isFilm = name.contains("film", true) || paths.any { it.startsWith("film") }
+            val isOav = name.contains("oav", true) || paths.any { it.startsWith("oav") }
+            // numéro « naturel » : Saga 3 / Saison 3 / saison3hs / kai3
+            val natural = Regex("""(?:saison|season|saga|kai)\s*(\d+)""", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)?.toIntOrNull()
+                ?: paths.mapNotNull { p -> Regex("""(?:saison|kai)(\d+)""").find(p)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull()
+            val unique = when {
+                isKai -> uniqueOrNext(100 + (natural ?: idx + 1))
+                isHs -> uniqueOrNext(40 + (natural ?: idx + 1))
+                isFilm -> uniqueOrNext(90)
+                isOav -> uniqueOrNext(91)
+                natural != null -> uniqueOrNext(natural)
+                else -> uniqueOrNext(300 + idx)
             }
-            .sortedWith(compareBy(nullsLast()) { it.seasonNumber })
+            SeasonInfo(name, paths, unique)
+        }.sortedWith(compareBy({ it.uniqueSeason >= 300 }, { it.uniqueSeason }))
 
         // Compte les épisodes de chaque saison (episodes.js, en parallèle)
         val counts = coroutineScope {
@@ -269,24 +375,24 @@ class AnimeSamaProvider : MainAPI() {
         val dubbed = mutableListOf<Episode>()
         counts.forEach { (season, count) ->
             val n = count ?: 1
-            val sn = season.seasonNumber
             season.paths.forEach { path ->
                 val isVf = path.trimEnd('/').endsWith("/vf")
                 val list = if (isVf) dubbed else subbed
-                val base = Regex("""(?:saison|season)\s*(\d+)""", RegexOption.IGNORE_CASE).find(season.name)?.groupValues?.get(1)?.toIntOrNull()
-                    ?: season.name
+                // nom lisible : tout sauf « Saison N » / « Season N » toutes seules
+                val plain = Regex("""^\s*(?:saison|season)\s*\d+\s*$""", RegexOption.IGNORE_CASE).matches(season.name)
                 for (ep in 1..n) {
                     list += newEpisode(episodeDataUrl(slug, path, ep)) {
-                        this.season = sn
+                        this.season = season.uniqueSeason
                         this.episode = ep
-                        this.name = if (season.name.isNotBlank() && !season.name.startsWith("Saison", true) && !season.name.startsWith("Season", true))
-                            "${season.name} · Épisode $ep" else null
+                        if (!plain) this.name = "${season.name} · Épisode $ep"
+                        // pas de vignette d'épisode côté site → poster de la fiche
+                        this.posterUrl = poster
                     }
                 }
             }
         }
 
-        val isMovie = byName.size == 1 && byName[0].seasonNumber == null &&
+        val isMovie = byName.size == 1 &&
             (byName[0].name.contains("film", true) || byName[0].name.contains("oav", true) || byName[0].name.contains("movie", true))
 
         return newAnimeLoadResponse(title, url, if (isMovie) TvType.AnimeMovie else TvType.Anime) {

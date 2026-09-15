@@ -384,6 +384,8 @@ class FranimeProvider : MainAPI() {
                     this.name = ep.title?.takeIf { it.isNotBlank() && !it.startsWith("Épisode") }
                     this.season = season.seasonNumber
                     this.episode = ep.number?.toInt() ?: (episodeIndex + 1)
+                    // vignette d'épisode si fournie, sinon poster de la fiche
+                    this.posterUrl = ep.thumbnail?.takeIf { it.isNotBlank() } ?: poster
                 }
             }
         }

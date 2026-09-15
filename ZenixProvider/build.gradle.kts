@@ -1,11 +1,11 @@
 // Use an integer for version numbers
-version = 6
+version = 7
 
 cloudstream {
     // All of these properties are optional, you can safely remove any of them.
 
     description = "Zenix — Films et séries en VF/VOSTFR"
-    authors = listOf("ArenaAgent")
+    authors = listOf("j97970293-lang")
 
     /**
     * Status int as one of the following:

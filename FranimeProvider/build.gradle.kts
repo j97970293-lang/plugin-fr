@@ -1,12 +1,12 @@
 // Use an integer for version numbers
-version = 2
+version = 3
 
 cloudstream {
     // All of these properties are optional, you can safely remove any of them.
 
     description = "FRAnime — Animes VF/VOSTFR, films & OAV (lecteurs Sibnet, VidMoly, FileMoon, SendVid, Uqload…)"
 
-    authors = listOf("ArenaAgent")
+    authors = listOf("j97970293-lang")
 
     /**
     * Status int as one of the following:
