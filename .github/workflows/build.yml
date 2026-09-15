@@ -54,7 +54,16 @@ jobs:
           java-version: 17
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v2
+        run: |
+          mkdir -p "$HOME/android-sdk/cmdline-tools"
+          curl -sL -o /tmp/cmdtools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -q /tmp/cmdtools.zip -d "$HOME/android-sdk/cmdline-tools-tmp"
+          mv "$HOME/android-sdk/cmdline-tools-tmp/cmdline-tools" "$HOME/android-sdk/cmdline-tools/latest"
+          rm -rf "$HOME/android-sdk/cmdline-tools-tmp"
+          yes | "$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null
+          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
 
       - name: Build Plugins
         run: |
