@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 5
+version = 6
 
 cloudstream {
     description = "1JOUR1FILM — Films et séries VF/VOSTFR (WordPress DooPlay, lecteurs Vidara & Lulustream)"

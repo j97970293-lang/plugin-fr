@@ -20,6 +20,7 @@ import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -518,11 +519,82 @@ class UnJour1FilmProvider : MainAPI() {
                             }
                         }
                     }.awaitAll()
+
+                    // vidsrc.buzz : multi-serveurs TMDB (films, séries et animes) —
+                    // HLS proxysés directs, extraits maison (chaîne embed → jeton →
+                    // api.php?a=sources → a=play).
+                    runCatching { vidsrcBuzzLinks(tmdb, seasonNum, epNum) { link ->
+                        produced.incrementAndGet()
+                        callback(link)
+                    } }
                 }
             }
             if (produced.get() > 0) found = true
         }
         return found
+    }
+
+    /**
+     * vidsrc.buzz — agrégateur TMDB multi-serveurs. Émet des liens HLS directs.
+     * /embed/{type}/{tmdb}[/s/e] → `var Q = {…}` (jeton) → /pl/api.php?a=sources →
+     * serveurs → /pl/api.php?a=play → {url:"/_stream?id=…"} (proxy HLS du site).
+     */
+    private suspend fun vidsrcBuzzLinks(
+        tmdbId: String,
+        season: Int?,
+        episode: Int,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val embedUrl = if (season != null) {
+            "https://vidsrc.buzz/embed/tv/$tmdbId/$season/$episode"
+        } else {
+            "https://vidsrc.buzz/embed/movie/$tmdbId"
+        }
+        val html = runCatching { app.get(embedUrl, headers = baseHeaders).text }.getOrNull() ?: return
+        val qm = Regex("""var Q = (\{.*?\});""", RegexOption.DOT_MATCHES_ALL).find(html) ?: return
+        val q = runCatching { mapper.readTree(qm.groupValues[1]) }.getOrNull() ?: return
+        val type = q.path("type").asText("movie").takeIf { it.isNotBlank() } ?: "movie"
+        val id = q.path("id").asText()
+        val s = q.path("s").asInt()
+        val e = q.path("e").asInt()
+        val token = q.path("t").asText()
+        if (id.isBlank() || token.isBlank()) return
+        val qs = "type=$type&id=${java.net.URLEncoder.encode(id, "UTF-8")}&s=$s&e=$e" +
+            "&t=${java.net.URLEncoder.encode(token, "UTF-8")}"
+        val srcJson = runCatching {
+            app.get(
+                "https://vidsrc.buzz/pl/api.php?a=sources&$qs",
+                headers = baseHeaders + mapOf("Referer" to embedUrl, "Accept" to "application/json")
+            ).text
+        }.getOrNull() ?: return
+        val servers = runCatching { mapper.readTree(srcJson).path("servers") }.getOrNull() ?: return
+        if (!servers.isArray) return
+        servers.take(4).forEach { sv ->
+            val ref = sv.path("ref").asText(null) ?: return@forEach
+            val name = sv.path("name").asText("Serveur").replace(Regex("""^Server\s+"""), "").trim()
+            val play = runCatching {
+                app.get(
+                    "https://vidsrc.buzz/pl/api.php?a=play&ref=${java.net.URLEncoder.encode(ref, "UTF-8")}" +
+                        "&t=${java.net.URLEncoder.encode(token, "UTF-8")}",
+                    headers = baseHeaders + mapOf("Referer" to embedUrl, "Accept" to "application/json")
+                ).text
+            }.getOrNull() ?: return@forEach
+            val u = Regex(""""url"\s*:\s*"([^"]+)"""").find(play)?.groupValues?.get(1)
+                ?.replace("\\/", "/") ?: return@forEach
+            val streamUrl = when {
+                u.startsWith("/") -> "https://vidsrc.buzz$u"
+                u.startsWith("http") -> u
+                else -> return@forEach
+            }
+            val nm = "1J1F+ · VidSrc $name"
+            callback(
+                ExtractorLink(
+                    nm, nm, streamUrl, "https://vidsrc.buzz/",
+                    quality = Qualities.Unknown.value,
+                    type = if (".m3u8" in streamUrl) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                )
+            )
+        }
     }
 
     /** POST admin-ajax action=j1f_get_nonce → nonce frais. */
@@ -596,6 +668,114 @@ class UnJour1FilmProvider : MainAPI() {
             }
             return false
         }
+        // Byse (bysezoxexe.com…) : /api/videos/{code}/ → playback chiffré AES-256-GCM.
+        // Clé = base64url(key_parts[v-1]) + base64url(key_parts[31-v-1]) pour la version v
+        // (déduit du bundle JS : Ea(v)=[v, 31-v], ws sélectionne 2 parts, ks les concatène).
+        if (host.contains("byse", true)) {
+            val base = Regex("""^(https?://[^/]+)""").find(url)?.groupValues?.get(1) ?: return false
+            val code = url.trimEnd('/').substringAfterLast('/').substringBefore('?')
+            val res = runCatching {
+                app.get(
+                    "$base/api/videos/$code/",
+                    headers = baseHeaders + mapOf(
+                        "Referer" to url, "Accept" to "application/json"
+                    )
+                ).text
+            }.getOrNull() ?: return false
+            val node = runCatching { mapper.readTree(res) }.getOrNull() ?: return false
+            val pb = node.path("playback")
+            if (!pb.isObject || pb.size() == 0) return false
+            val parts = pb.path("key_parts")
+            val version = pb.path("version").asText("").trim().toIntOrNull()
+            var keyBytes: ByteArray? = null
+            if (parts.isArray && parts.size() > 0 && version != null && version in 1..20) {
+                val a = version
+                val b = 31 - version
+                if (a in 1..parts.size() && b in 1..parts.size()) {
+                    val ka = b64u(parts.get(a - 1).asText())
+                    val kb = b64u(parts.get(b - 1).asText())
+                    if (ka != null && kb != null) keyBytes = ka + kb
+                }
+            }
+            if (keyBytes == null && parts.isArray) {
+                // fallback (version inconnue) : concatène toutes les parts, comme le client
+                val all = parts.mapNotNull { b64u(it.asText()) }
+                if (all.isNotEmpty()) keyBytes = all.reduce { acc, b -> acc + b }
+            }
+            val iv = b64u(pb.path("iv").asText())
+            val payload = b64u(pb.path("payload").asText())
+            if (keyBytes == null || iv == null || payload == null) return false
+            val plain = runCatching {
+                javax.crypto.Cipher.getInstance("AES/GCM/NoPadding").apply {
+                    init(
+                        javax.crypto.Cipher.DECRYPT_MODE,
+                        javax.crypto.spec.SecretKeySpec(keyBytes, "AES"),
+                        javax.crypto.spec.GCMParameterSpec(128, iv)
+                    )
+                }.doFinal(payload)
+            }.getOrNull() ?: return false
+            val info = runCatching { mapper.readTree(String(plain, Charsets.UTF_8)) }.getOrNull() ?: return false
+            var found = false
+            info.path("sources").forEach { src ->
+                val u = src.path("url").asText(null)?.takeIf { it.startsWith("http") } ?: return@forEach
+                val label = src.path("label").asText("")?.takeIf { it.isNotBlank() }
+                found = true
+                callback(
+                    newExtractorLink("Byse", "Byse" + (label?.let { " · $it" } ?: ""), u) {
+                        this.type = if (".m3u8" in u) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                        this.referer = base
+                    }
+                )
+            }
+            return found
+        }
+        // C'était mieux avant (cetaitmieuxavant.website) : page épisode avec
+        // const videoData={"servers":[{name,url},…]} → 4 serveurs (firestream,
+        // byse, lulustream, p2p). On relaie chaque serveur vers son extracteur.
+        if (host.contains("cetaitmieuxavant", true)) {
+            val page = runCatching {
+                app.get(url.trimEnd('/') + "/", headers = baseHeaders + mapOf("Referer" to "$mainUrl/")).text
+            }.getOrNull() ?: return false
+            val vm = Regex("""const videoData\s*=\s*(\{.*?\});""", RegexOption.DOT_MATCHES_ALL).find(page)
+                ?: return false
+            val data = runCatching { mapper.readTree(vm.groupValues[1]) }.getOrNull() ?: return false
+            var found = false
+            data.path("servers").forEach { sv ->
+                val u = sv.path("url").asText(null)?.takeIf { it.startsWith("http") } ?: return@forEach
+                if ("p2pstream" in u) return@forEach // lecteur P2P, non extractible
+                if (runCatching { extract(u, callback) }.getOrDefault(false)) found = true
+            }
+            return found
+        }
+        // FireStream (firestream.site) : /e/{code} → <script id="video-data"> avec
+        // signedVideoUrl (MP4/HLS direct). Le champ est retenu si l'IP est flaggée VPN.
+        if (host.contains("firestream", true)) {
+            val base = Regex("""^(https?://[^/]+)""").find(url)?.groupValues?.get(1) ?: return false
+            val page = runCatching {
+                app.get(url, headers = baseHeaders + mapOf("Referer" to "$mainUrl/")).text
+            }.getOrNull() ?: return false
+            val vm = Regex(
+                """<script id="video-data" type="application/json">(.*?)</script>""",
+                RegexOption.DOT_MATCHES_ALL
+            ).find(page) ?: return false
+            val data = runCatching { mapper.readTree(vm.groupValues[1]) }.getOrNull() ?: return false
+            val signed = data.path("video").path("signedVideoUrl").asText(null)
+                ?.takeIf { it.startsWith("http") } ?: return false
+            callback(
+                newExtractorLink("FireStream", "FireStream", signed) {
+                    this.type = if (".m3u8" in signed || ".m3u8" in url) ExtractorLinkType.M3U8
+                    else ExtractorLinkType.VIDEO
+                    this.referer = base
+                }
+            )
+            return true
+        }
         return false
     }
+
+    /** base64url (alphabet -_ , sans remplissage) → octets. */
+    private fun b64u(s: String): ByteArray? = runCatching {
+        val pad = if (s.length % 4 == 0) 0 else 4 - s.length % 4
+        android.util.Base64.decode(s.replace("-", "+").replace("_", "/") + "=".repeat(pad), android.util.Base64.DEFAULT)
+    }.getOrNull()
 }

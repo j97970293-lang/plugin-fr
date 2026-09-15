@@ -177,6 +177,8 @@ class CineStreamProvider : MainAPI() {
     // cookie cf_clearance — les suivantes passent seules.
     private val cfKiller by lazy { CloudflareKiller() }
 
+    private val mapper by lazy { com.fasterxml.jackson.databind.ObjectMapper() }
+
     private val baseHeaders get() = mapOf(
         "User-Agent" to USER_AGENT,
         "Accept-Language" to "fr-FR,fr;q=0.9"
@@ -357,7 +359,65 @@ class CineStreamProvider : MainAPI() {
                 }
             }.awaitAll()
         }
+
+        // vidsrc.buzz : agrégateur TMDB multi-serveurs — HLS proxysés directs
+        // (chaîne embed → jeton → api.php?a=sources → a=play)
+        runCatching { vidsrcBuzzLinks(tmdbId) { link -> found = true; callback(link) } }
         return found
+    }
+
+    /**
+     * vidsrc.buzz — agrégateur TMDB multi-serveurs (films et séries, y compris
+     * animes). /embed/movie/{tmdb} → `var Q = {…}` (jeton) → /pl/api.php?a=sources
+     * → serveurs → /pl/api.php?a=play → {url:"/_stream?id=…"} (proxy HLS).
+     */
+    private suspend fun vidsrcBuzzLinks(tmdbId: String, callback: (ExtractorLink) -> Unit) {
+        val embedUrl = "https://vidsrc.buzz/embed/movie/$tmdbId"
+        val html = runCatching { app.get(embedUrl, headers = baseHeaders).text }.getOrNull() ?: return
+        val qm = Regex("""var Q = (\{.*?\});""", RegexOption.DOT_MATCHES_ALL).find(html) ?: return
+        val q = runCatching { mapper.readTree(qm.groupValues[1]) }.getOrNull() ?: return
+        val type = q.path("type").asText("movie").takeIf { it.isNotBlank() } ?: "movie"
+        val id = q.path("id").asText()
+        val s = q.path("s").asInt()
+        val e = q.path("e").asInt()
+        val token = q.path("t").asText()
+        if (id.isBlank() || token.isBlank()) return
+        val qs = "type=$type&id=${java.net.URLEncoder.encode(id, "UTF-8")}&s=$s&e=$e" +
+            "&t=${java.net.URLEncoder.encode(token, "UTF-8")}"
+        val srcJson = runCatching {
+            app.get(
+                "https://vidsrc.buzz/pl/api.php?a=sources&$qs",
+                headers = baseHeaders + mapOf("Referer" to embedUrl, "Accept" to "application/json")
+            ).text
+        }.getOrNull() ?: return
+        val servers = runCatching { mapper.readTree(srcJson).path("servers") }.getOrNull() ?: return
+        if (!servers.isArray) return
+        servers.take(4).forEach { sv ->
+            val ref = sv.path("ref").asText(null) ?: return@forEach
+            val name = sv.path("name").asText("Serveur").replace(Regex("""^Server\s+"""), "").trim()
+            val play = runCatching {
+                app.get(
+                    "https://vidsrc.buzz/pl/api.php?a=play&ref=${java.net.URLEncoder.encode(ref, "UTF-8")}" +
+                        "&t=${java.net.URLEncoder.encode(token, "UTF-8")}",
+                    headers = baseHeaders + mapOf("Referer" to embedUrl, "Accept" to "application/json")
+                ).text
+            }.getOrNull() ?: return@forEach
+            val u = Regex(""""url"\s*:\s*"([^"]+)"""").find(play)?.groupValues?.get(1)
+                ?.replace("\\/", "/") ?: return@forEach
+            val streamUrl = when {
+                u.startsWith("/") -> "https://vidsrc.buzz$u"
+                u.startsWith("http") -> u
+                else -> return@forEach
+            }
+            val nm = "CineStream+ · VidSrc $name"
+            callback(
+                ExtractorLink(
+                    nm, nm, streamUrl, "https://vidsrc.buzz/",
+                    Qualities.Unknown.value,
+                    type = if (".m3u8" in streamUrl) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                )
+            )
+        }
     }
 
     /** Renomme un lien extrait avec le libellé du bouton du site. */

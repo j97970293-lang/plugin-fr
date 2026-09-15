@@ -449,6 +449,7 @@ ayant un catalogue TMDB. URLs exactes (testées 2026-09) :
 | fstream | `api.movix.cash/api/fstream/movie/{id}` | JSON `players{VF:[{url,player}],VOSTFR:…}` (films) | ✅ (films seulement, TV=404) |
 | playerix | `apis.wavewatch.top/playerix.php?type=tv&id={s}&season=&episode=` | boutons `<button data-url="…u={base64url}">` + `data-fmt="m3u8"` + `data-alive` | ⚠️ **TV : seuls les boutons `data-fmt="m3u8"` sont spécifiques** ; les iframes sont IDENTIQUES pour tous les épisodes → filtrer ! Films : tout bon |
 | mouve | `apis.wavewatch.top/mouve.php?json=1&type=&id=&s=&e=` | JSON `streams[{url,quality,lang,format,iframe}]` | ⚠️ **TV : ~2/3 des liens identiques entre épisodes → films seulement** |
+| **vidsrc.buzz** (v9) | `vidsrc.buzz/embed/{movie\|tv}/{tmdb}[/{s}/{e}]` → jeton `var Q={…}` → `vidsrc.buzz/pl/api.php?a=sources&type=&id=&s=&e=&t={jeton}` → serveurs `[{ref,name}]` → `a=play&ref=&t=` → `{url:"/_stream?id=…"}` | JSON à 2 temps + HLS proxysé `/_stream?id=` (préfixer `https://vidsrc.buzz`) | ✅ spécifique — **couvre aussi les ANIMES** (99071 ✓), plusieurs serveurs, certains 502 → en tester 4 et garder les `a=play` OK |
 
 Règles :
 - Langues des agrégateurs : `vf/vff/vfq/vo/vostfr/multi` (apiwiflix : `language` ;
@@ -584,9 +585,70 @@ Pages, aucune protection) offrent une source stable et légale de TV en direct :
   group-title, ~215 chaînes pour fr.m3u (~65 % vivantes à un instant T).
 - Filtrer `[Geo-blocked]` / `[Not 24/7]` et les noms parasites (certains
   contiennent des user-agents…), nettoyer `(1080p)` du nom affiché.
-- CloudStream : `newLiveSearchResponse` + `newLiveStreamLoadResponse` +
+- CloudStream : `newLiveSearchResponse` + `newLiveStreamLoadResponse` + 
   `ExtractorLinkType.M3U8` direct — cf. WaveWatch (chaînes live) et
   TeleFrance (M3U). Réglage ⚙ = URL de playlist → n'importe quelle liste.
+
+### 4.7 REVERSE D'UN HÉBERGEUR CHIFFRÉ AES-256-GCM (bysezoxexe, v9)
+
+Symptôme : « peu de serveurs » sur 1jour1film — les sources du site
+s'appuyaient sur des hébergeurs inconnus de tout extracteur. Méthode :
+
+1. **Identifier le vrai lecteur** : la source `/e/{code}` d'un SPA React
+   renvoie une coquille de 1,6 Ko → le vrai code est dans un bundle
+   **lazy-loadé** (`videoPagesBundle-*.js`, listé dans le bundle principal).
+   C'est lui qu'il faut analyser, pas l'index.
+2. **Trouver l'API** : chercher `"/api/…"` dans le bundle : ici
+   `GET /api/videos/{code}/` renvoie `playback{algorithm, iv, payload,
+   key_parts[30], version, expires_at}`.
+3. **Dériver la clé** (reverse des fonctions minifiées `ws`/`ks`/`Ea`) :
+   - `Ea(version)` = `[version, 31 - version]` (indices 1-based, valides
+     uniquement si ≤ nombre de parts) ;
+   - la clé = `base64url(key_parts[v-1]) + base64url(key_parts[30-v])`
+     → 32 octets exactement (AES-256) ;
+   - fallback si version inconnue : concaténer TOUTES les parts.
+4. **Déchiffrer** : AES-256-GCM standard, IV = base64url(playback.iv)
+   (12 octets), tag 128 bits → `javax.crypto.Cipher("AES/GCM/NoPadding")`.
+   Le JSON clair contient `sources[{url (HLS direct), label, quality}]`.
+   Testé en Python (`cryptography`) puis porté en Kotlin — m3u8 200 OK.
+
+Cas cousins rencontrés le même jour (1jour1film séries) :
+- **cetaitmieuxavant.website** : page épisode avec
+  `const videoData={"servers":[{name,url}×4]}` → relayer chaque serveur
+  vers son extracteur (firestream/byse/lulustream… ; p2pstream = non
+  extractible, on saute).
+- **firestream.site** : `/e/{code}` contient
+  `<script id="video-data" type="application/json">{video:{signedVideoUrl,…}}`
+  → lien direct. ⚠️ le champ disparaît si l'IP est flaggée VPN
+  (`isVpn:true`) — depuis un datacenter on ne voit rien, depuis une IP
+  résidentielle ça marche. Ne pas conclure « mort » trop vite.
+
+### 4.8 TV MALGACHE : LIVES YOUTUBE RÉSOLUS À LA VOLÉE (TeleFrance v2)
+
+Les chaînes de Madagascar n'existent dans AUCUNE playlist IPTV publique
+(mg.m3u = 1 chaîne, aucune malgache ; Free-TV/IPTV = rien). Mais TVM,
+RealTV, RTA, Viva TV, KOLO TV, TV Plus diffusent leurs journaux en direct
+sur YouTube — et **CloudStream embarque un extracteur YouTube** (vérifier :
+`unzip -l cloudstream.jar | grep -i youtube`).
+
+Méthode (aucune clé API, côté serveur de la page) :
+1. `GET youtube.com/channel/{channelId}/live` (le HTML serveur suffit,
+   pas besoin de JS) ;
+2. premier `"videoId":"…"` de la page = direct en cours (sinon dernière
+   vidéo —acceptable pour une chaîne info) ;
+3. fiche = `newLiveStreamLoadResponse(nom, url, watchUrl)`,
+   lecture = `loadExtractor("https://www.youtube.com/watch?v=…")`.
+4. Logos : avatar `yt3.googleusercontent.com` de la chaîne (stable).
+
+### 4.9 UNE IP DATACENTER N'EST PAS UN TÉLÉPHONE (leçon transversale v9)
+
+Trois fois le même piège dans cette version : firestream masque
+`signedVideoUrl` aux IP « VPN » (Google LLC), animoflix challenge les
+pages épisodes, franime/api renvoie 403. **Toujours tester un lecteur
+depuis une vraie IP mobile avant de le déclarer mort**, et encapsuler
+dans `runCatching` + garder d'autres serveurs : l'app de l'utilisateur
+(Orange/MVola à Tana) ne voit pas le même internet que le sandbox.
+
 
 ## 5. PIÈGES RENCONTRÉS (leçons réelles)
 

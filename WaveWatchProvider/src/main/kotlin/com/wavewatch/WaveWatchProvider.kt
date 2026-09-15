@@ -298,6 +298,8 @@ class WaveWatchProvider : MainAPI() {
     )
 
     private val baseHeaders = mapOf("user-agent" to USER_AGENT)
+
+    private val mapper by lazy { com.fasterxml.jackson.databind.ObjectMapper() }
     private val embedHeaders get() = mapOf("user-agent" to USER_AGENT, "referer" to "$mainUrl/")
 
     private val tmdbImage = "https://image.tmdb.org/t/p"
@@ -686,6 +688,8 @@ class WaveWatchProvider : MainAPI() {
             aggregators += async(Dispatchers.IO) { runCatching { movixLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
             aggregators += async(Dispatchers.IO) { runCatching { movixFstreamLinks(tmdb, season) }.getOrDefault(emptyList()) }
             aggregators += async(Dispatchers.IO) { runCatching { moviesApiLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
+            // vidsrc.buzz : multi-serveurs TMDB — couvre aussi les animes (99071 ✓)
+            aggregators += async(Dispatchers.IO) { runCatching { vidsrcBuzzLinks(tmdb, season, episode) }.getOrDefault(emptyList()) }
             // mouve : films uniquement — en TV la majorité des liens ne dépendent pas
             // de l'épisode demandé (vérifié : mêmes URLs pour 2x1 et 2x2).
             if (!isTv) {
@@ -750,7 +754,7 @@ class WaveWatchProvider : MainAPI() {
             }
             val originP = when (hl.origin) {
                 "zeus" -> 0; "animoflix" -> 1; "apiwiflix" -> 2; "movix" -> 3; "fstream" -> 4
-                "playerix" -> 5; "mouve" -> 6; "site" -> 7; "animoflix-r" -> 8; else -> 9
+                "playerix" -> 5; "mouve" -> 6; "site" -> 7; "animoflix-r" -> 8; "vidsrcbuzz" -> 9; else -> 10
             }
             return langP * 10 + originP
         }
@@ -1194,6 +1198,61 @@ class WaveWatchProvider : MainAPI() {
         // réponse : { result: true, sources: [ { url, tracks: [...] } ], title, … }
         val url = Regex(""""url"\s*:\s*"(https?://[^"]+)"""").find(json)?.groupValues?.get(1) ?: return emptyList()
         return listOf(HostLink(url, null, "MoviesApi", "moviesapi", direct = url.contains(".m3u8")))
+    }
+
+    /**
+     * vidsrc.buzz — agrégateur TMDB multi-serveurs (films, séries ET animes).
+     * Chaîne : /embed/{type}/{tmdb}[/s/e] → jeton `var Q = {…}` → /pl/api.php?a=sources
+     * → serveurs [{ref, name}] → /pl/api.php?a=play&ref&token → {url:"/_stream?id=…"}
+     * (HLS proxysé par vidsrc.buzz, liens directs).
+     */
+    private suspend fun vidsrcBuzzLinks(tmdb: String, season: Int?, episode: Int?): List<HostLink> {
+        val embedUrl = if (season != null && episode != null) {
+            "https://vidsrc.buzz/embed/tv/$tmdb/$season/$episode"
+        } else {
+            "https://vidsrc.buzz/embed/movie/$tmdb"
+        }
+        val html = runCatching { app.get(embedUrl, headers = baseHeaders).text }.getOrNull()
+            ?: return emptyList()
+        val qm = Regex("""var Q = (\{.*?\});""", RegexOption.DOT_MATCHES_ALL).find(html)
+            ?: return emptyList()
+        val q = runCatching { mapper.readTree(qm.groupValues[1]) }.getOrNull() ?: return emptyList()
+        val type = q.path("type").asText("movie").takeIf { it.isNotBlank() } ?: "movie"
+        val id = q.path("id").asText()
+        val s = q.path("s").asInt()
+        val e = q.path("e").asInt()
+        val token = q.path("t").asText()
+        if (id.isBlank() || token.isBlank()) return emptyList()
+        val qs = "type=$type&id=${java.net.URLEncoder.encode(id, "UTF-8")}&s=$s&e=$e" +
+            "&t=${java.net.URLEncoder.encode(token, "UTF-8")}"
+        val srcJson = runCatching {
+            app.get(
+                "https://vidsrc.buzz/pl/api.php?a=sources&$qs",
+                headers = baseHeaders + mapOf("Referer" to embedUrl, "Accept" to "application/json")
+            ).text
+        }.getOrNull() ?: return emptyList()
+        val servers = runCatching { mapper.readTree(srcJson).path("servers") }.getOrNull() ?: return emptyList()
+        if (!servers.isArray || servers.size() == 0) return emptyList()
+        val out = mutableListOf<HostLink>()
+        servers.take(4).forEach { sv ->
+            val ref = sv.path("ref").asText(null) ?: return@forEach
+            val name = sv.path("name").asText("Serveur").replace(Regex("""^Server\s+"""), "").trim()
+            val play = runCatching {
+                app.get(
+                    "https://vidsrc.buzz/pl/api.php?a=play&ref=${java.net.URLEncoder.encode(ref, "UTF-8")}" +
+                        "&t=${java.net.URLEncoder.encode(token, "UTF-8")}",
+                    headers = baseHeaders + mapOf("Referer" to embedUrl, "Accept" to "application/json")
+                ).text
+            }.getOrNull() ?: return@forEach
+            val u = Regex(""""url"\s*:\s*"([^"]+)"""").find(play)?.groupValues?.get(1)
+                ?.replace("\\/", "/") ?: return@forEach
+            if (!u.startsWith("http") && u.startsWith("/")) {
+                out += HostLink("https://vidsrc.buzz$u", null, "VidSrc $name", "vidsrcbuzz", direct = true)
+            } else if (u.startsWith("http")) {
+                out += HostLink(u, null, "VidSrc $name", "vidsrcbuzz", direct = u.contains(".m3u8"))
+            }
+        }
+        return out
     }
 
     /** api.movix.cash/api/fstream/… — liens french-stream avec vraies étiquettes VFQ/VF/VOSTFR (films). */

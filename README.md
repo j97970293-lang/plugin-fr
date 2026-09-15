@@ -17,7 +17,7 @@
 | **CineStreamProvider** | cinestream.info | films VF/VOSTFR — 15 lecteurs par titre |
 | **PurstreamProvider** | purstream.ad | films & séries — flux HLS directs |
 | **UnJour1FilmProvider** | 1jour1film0826b.website | films & séries VF/VOSTFR (8 400+ titres) |
-| **TeleFranceProvider** | iptv-org (GitHub) | **TV française en direct** — 200+ chaînes (info, cinéma, sport, enfants…) |
+| **TeleFranceProvider** | iptv-org (GitHub) | **TV française en direct** — 200+ chaînes + **chaînes de Madagascar 🇲🇬** (TVM, RTA, RealTV…) |
 
 ## Installation
 

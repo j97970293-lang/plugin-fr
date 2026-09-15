@@ -1,5 +1,35 @@
 # Journal des mises à jour
 
+## v9 — 2026-09-16 (vidsrc.buzz + hébergeurs craqués + TV Madagascar)
+
+### 🆕 Agrégateur vidsrc.buzz — WaveWatch v7, Zenix v8, CineStream v5, UnJour1Film v6
+- **Nouvelle source multi-serveurs TMDB** (films, séries ET **animes**) : la page d'embed `vidsrc.buzz/embed/{type}/{tmdb}` porte un jeton signé, l'API `/pl/api.php?a=sources` liste les serveurs, `a=play` rend l'URL du flux `/_stream?id=…` (HLS proxysé, direct). Chaîne entièrement reversée et testée (Breaking Bad S1E1 et Fight Club → m3u8 200 OK ; Redo of Healer 99071 → serveur détecté).
+- **WaveWatch** : c'est la réponse au « aucun serveur sur les animes » (Redo of Healer & co) — la pile d'agrégateurs TMDB existante (wwembed, zeus, apiwiflix, playerix, movix, moviesApi, mouve, 1embed) est vide pour les animes ; vidsrc.buzz s'ajoute à la pile pour tout contenu TMDB.
+- **Zenix, CineStream, 1jour1film** : même ajout — plus de serveurs sur les films ET les séries.
+
+### 🛠️ UnJour1Film v6 — « peu de serveurs films / aucun sur les séries » réparé
+- Diagnostic : les sources du site utilisent des hébergeurs que rien n'extrayait.
+- **Byse (bysezoxexe.com) craqué** : l'API `/api/videos/{code}/` renvoie un `playback` chiffré **AES-256-GCM** ; la clé se dérive de `key_parts` selon la version (`parts[v-1] + parts[30-v]`, reverse du bundle JS lazy-loadé) → HLS direct déchiffré (vérifié : m3u8 lisible).
+- **« C'était mieux avant » (cetaitmieuxavant.website)** : chaque page épisode embarque `videoData.servers` = 4 serveurs (FireStream, Byse, Lulustream, p2p) → tous relayés sauf p2p.
+- **FireStream (firestream.site)** : `<script id="video-data">` avec `signedVideoUrl` (MP4/HLS direct). NB : le champ est masqué aux IP flaggées VPN — depuis un mobile il est là.
+- Résultat : films = Lulustream + Byse + agrégateurs ; séries = jusqu'à 3 serveurs site + pile TMDB + vidsrc.buzz.
+
+### 🆕 TeleFrance v2 — section 🇲🇬 Madagascar (chaînes d'Antananarivo)
+- **TVM (Télévision Malagasy), RealTV, RTA (Radio Télévision Analamanga), Viva TV, KOLO TV, TV Plus Madagascar** : leurs directs YouTube sont résolus à la volée (page `/live` de la chaîne → vidéo en cours → extracteur YouTube intégré à CloudStream). Vérifié en direct : TVM « Vaovao » et RealTV « L'invité du jour » en flag `isLiveContent`.
+- Hors direct, la page joue la dernière vidéo de la chaîne (utile pour les chaînes info). Logos inclus, recherche « madagascar » fonctionne.
+- Les playlists IPTV publiques n'ont aucune chaîne malgache (mg.m3u = 1 chaîne hors-sujet) — les lives YouTube officiels des chaînes sont la seule source fiable.
+
+### 📚 TUTO
+- §4 : ligne vidsrc.buzz dans le tableau des agrégateurs.
+- §4.7 : méthode complète « reverse d'un hébergeur chiffré AES-256-GCM » (bysezoxexe) + les cousins firestream/cetaitmieuxavant.
+- §4.8 : TV malgache — résolution runtime des lives YouTube.
+- §4.9 : leçon transversale — une IP datacenter n'est pas un téléphone (VPN-flagging, CF) : toujours garder `runCatching` + serveurs redondants.
+
+### ✅ Révision des 14 sources
+Afterdark, AnimeSama, AnimeSite, Flemmix, FrenchStream, Purstream, Vostfree, WaveWatch, 1jour1film : répondent OK depuis le sandbox. AnimoFlix et Franime : Cloudflare sur IP datacenter (CloudflareKiller en place — l'app sur mobile passe, comme vérifié v8 pour 1jour1film).
+
+---
+
 ## v8 — 2026-09-15 (résolution Cloudflare partout + TV française en direct)
 
 ### 🆕 TeleFranceProvider v1 — Télé FR Direct
