@@ -38,8 +38,8 @@
 <details>
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
-- repo.json (v11.3, 24 sources) : `https://x0.at/dyyE.json`
-- plugins.json (liste des 24 extensions, v11.3) : `https://x0.at/WL47.json`
+- repo.json (v11.4, 24 sources) : `https://x0.at/dyyE.json`
+- plugins.json (liste des 24 extensions, v11.4) : `https://x0.at/RuRD.json`
 - WaveWatch v7 : `https://x0.at/dDfv.cs3` · Zenix v8 : `https://x0.at/tYS4.cs3` · 1JOUR1FILM v6 : `https://x0.at/jWyq.cs3` · CineStream v5 : `https://x0.at/h484.cs3` · Télé FR Direct v2 (Madagascar 🇲🇬) : `https://x0.at/MpNP.cs3` · AnimeSama v6 : `https://x0.at/i1wf.cs3` · AnimeSite v5 : `https://x0.at/ABrQ.cs3` · FrenchStream v5 : `https://x0.at/943P.cs3` · Purstream v5 : `https://x0.at/yD9r.cs3` · Vostfree v4 : `https://x0.at/Mozr.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.
@@ -53,6 +53,9 @@ Les adresses des miroirs sont re-publiées à chaque version.
 ## Avertissement
 
 Ce dépôt ne fait qu'indexer des sites publics tiers ; il n'héberge aucun contenu. À usage strictement personnel — respectez les lois de votre pays.
+
+### Miroirs des nouveautés v11.4 (x0.at)
+- MovixProvider.cs3 (v5 — refonte sur le vrai site movix.men, 13+ serveurs) : `https://x0.at/uYRa.cs3`
 
 ### Miroirs des nouveautés v11.3 (x0.at)
 - MovixProvider.cs3 (v4 — recherche réparée + chargement parallèle) : `https://x0.at/Lm5H.cs3`
