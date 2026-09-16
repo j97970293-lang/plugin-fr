@@ -845,8 +845,9 @@ du paysage français :
 - **hentai.adkami.com** : catalogue + recherche OK mais le player
   (« L'anime est licencié ou aucune vidéo ») est masqué aux IP
   datacenter — même les animes du domaine principal. Cookie `nsfw=true`
-  sans effet. Inexploitable sans structure de player vérifiable → écarté
-  (cf. §4.9 : ne jamais coder un lecteur qu'on n'a pas vu).
+  sans effet. Écarté en v10.1 (cf. §4.9)… puis **intégré en v11** à la
+  demande explicite de l'utilisateur, avec le décodeur reversé depuis
+  main.min.js et la règle « best-effort » (cf. §4.19).
 - **hentaivost.fr** : Cloudflare « Just a moment » (403) sur toutes les
   pages depuis un datacenter.
 - **hentai-fap.fr / hentai-paradise.fr / maruchihentai.cc** : templates
@@ -864,3 +865,68 @@ service worker qui la servait est désactivé par le site lui-même).
 En revanche les URLs `…srt?Policy=…` du CDN CloudFront sont signées et
 téléchargeables directement : CloudStream accepte le SRT tel quel.
 Vérifier le format renvoyé par le proxy AVANT de l'utiliser.
+
+
+### 4.17 ADKAMI : LE DÉCODEUR « YOUTUBE-MARQUEUR » (v11)
+
+Le player adkami (www comme hentai) n'est jamais dans le HTML pour un
+visiteur anonyme datacenter ; sur www.adkami.com il L'EST (validé :
+`<iframe data-src="//www.dailymotion.com/embed/video/xt6r66…">`).
+Le JS main.min.js révèle le décodeur des liens chiffrés :
+
+```js
+e = e.split("https://www.youtube.com/embed/")[1]   // le marqueur n'est
+e = atob(e)                                        // PAS un vrai lien YT
+for (let o of e) t += String.fromCharCode((175 ^ o.charCodeAt()) - key[i].charCodeAt())
+```
+
+- le token = `https://www.youtube.com/embed/{base64}` ;
+- base64 → octets ; `out[i] = ((175 XOR b) - key[i]) & 0xFFFF`, clé
+  `ETEfazefzeaZa13MnZEe`, index cyclique (`i > len-2 ? 0 : i+1`) ;
+- le résultat est l'URL réelle de l'embed (dailymotion, streamtape…).
+⚠ CE N'EST PAS un simple XOR octet-clé : la formule `(175^b)-k` avec
+soustraction. Toujours recopier la formule MINIFIED octet par octet,
+puis la re-vérifier par un round-trip python (encoder ← décoder).
+
+### 4.18 LARAVEL LIVEWIRE : LE SNAPSHOT QUI S'ÉCHAPPE (Movix v11)
+
+Les sites Laravel+Livewire (movix.zip) rendent les composants serveur :
+`wire:snapshot="&quot;…&quot;"` (JSON **HTML-échappé**). Pour changer de
+saison : POST `/livewire/update` avec
+`{"components":[{"snapshot":…,"updates":{},"calls":[{"method":"updateSeason","params":["2396"]}]}]}`.
+La réponse = `{"components":[{"effects":{"html":"…"}}]}`.
+⚠ `json = body` (param nicehttp) pour un corps JSON — `data=` c'est du
+form-encodé. ⚠ La RECHERCHE du modal Livewire renvoie des cartes sans
+liens individuels : vérifier s'il n'existe pas une simple page
+`/search/{q}` (c'est le cas chez movix — 21 cartes, mêmes templates que
+les listes) avant de coder un POST Livewire.
+
+### 4.19 HENTAISTREAM.IO : 3× ROT13→BASE64 + FORM URL-ENCODÉ STRICT (v11)
+
+Chaîne WordPress complète, crackée sans navigateur :
+1. épisode → iframe `player.php?data={b64}` ;
+2. page player → meta `x-secure-token="sha512-{token}"` ;
+3. token : strip `sha512-` puis **3 fois {ROT13 → base64-décoder}** →
+   JSON `{en, iv, uri}` ;
+4. POST `{uri}api.php` (action=zarat_get_data_player_ajax, a=en, b=iv)
+   → `data.sources[].src` = m3u8 (octopus).
+⚠ Le POST DOIT être form-encodé avec les `+` du base64 en `%2B`
+(curl --data brut → 500 côté serveur). En Kotlin : `data = mapOf(...)`
+de app.post le fait naturellement ; en curl : `--data-urlencode`.
+⚠ `M3u8Helper.generateM3u8(...)` est une fonction de l'OBJET COMPANION
+(après vérification javap) — `M3u8Helper().generateM3u8` ne compile pas.
+
+### 4.20 VIDZY : DEUX SYNTAXES D'APPEL DU MÊME XOR (Movix v11)
+
+Le player vidzy encode ses sources `sources:[{src: (function(s){…})("TOKEN")}]`
+— l'appel IIFE se termine par `})("…")` et non `}("…")` (FrenchStream) :
+regex `\}?\("([A-Za-z0-9+/=]{40,})"\)` pour couvrir les deux. Le XOR
+lui-même : base64 → reverse → `b[i] ^ ((0x3d + i*89 + sommeCodesHostname) & 0xFF)`.
+Le hostname compte (vidzy.org ≠ vidzy.live ≠ fsvid.lol). Le fallback du
+site (`/troll/master.m3u8`) est une vidéo piège : ne l'utiliser JAMAIS,
+si le décodage échoue → pas de lien.
+⚠ Sur un agrégateur multi-hébergeurs (movix : dood, voe, filemoon,
+uqload, multiup, vidzy, flixeo…) : `loadExtractor` D'ABORD (extracteurs
+officiels), `genericExtract` SEULEMENT en fallback — et le callback de
+loadExtractor n'est PAS une coroutine : `newExtractorLink` (suspend) y
+est interdit, construire `ExtractorLink(...)` directement.

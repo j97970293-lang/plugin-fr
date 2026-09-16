@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 2
+version = 3
 
 cloudstream {
     description = "Streamixx — Films et séries en streaming (MP4 directs 360p/480p/720p, sous-titres FR inclus)"

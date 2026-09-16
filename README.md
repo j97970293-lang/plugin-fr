@@ -1,6 +1,6 @@
 # Plugin fr · Dépôt d'extensions CloudStream
 
-**20 extensions** (films, séries, animes, TV live, 18+) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
+**23 extensions** (films, séries, animes, TV live, 18+) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
 
 | Extension | Site | Contenu |
 |---|---|---|
@@ -22,8 +22,11 @@
 | **HentaiCityProvider** | hentaicity.com | 🔞 hentai & 3D animés — HLS directs |
 | **HentaiHavenProvider** | hentaihaven.xxx | 🔞 Rule34 animé — HLS directs |
 | **XvideosProvider** | xvideos.com | 🔞 vidéos amateurs & studios — HLS directs |
+| **MovixProvider** | movix.zip | films & séries — versions TRUEFRENCH/VF/VOSTFR, multi-serveurs |
 | **TrixHentaiProvider** | trixhentai.com | 🔞 hentai **VOSTFR** — MP4 directs |
 | **PornovoreProvider** | pornovore.fr | 🔞 films X **français** — MP4 directs |
+| **AdkamiHentaiProvider** | hentai.adkami.com | 🔞 hentai **VOSTFR/raw** — catalogue Adkami |
+| **HentaiStreamProvider** | hentaistream.io | 🔞 hentai **EN sous-titré** — m3u8 multi-qualités |
 
 ## Installation
 
@@ -35,7 +38,7 @@
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
 - repo.json : `https://x0.at/HP0i.json`
-- plugins.json (liste des 20 extensions) : `https://x0.at/BX0Y.json`
+- plugins.json (liste des extensions) : `https://x0.at/BX0Y.json`
 - WaveWatch v7 : `https://x0.at/dDfv.cs3` · Zenix v8 : `https://x0.at/tYS4.cs3` · 1JOUR1FILM v6 : `https://x0.at/jWyq.cs3` · CineStream v5 : `https://x0.at/h484.cs3` · Télé FR Direct v2 (Madagascar 🇲🇬) : `https://x0.at/MpNP.cs3` · AnimeSama v6 : `https://x0.at/i1wf.cs3` · AnimeSite v5 : `https://x0.at/ABrQ.cs3` · FrenchStream v5 : `https://x0.at/943P.cs3` · Purstream v5 : `https://x0.at/yD9r.cs3` · Vostfree v4 : `https://x0.at/Mozr.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.

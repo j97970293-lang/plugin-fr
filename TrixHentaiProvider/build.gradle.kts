@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 1
+version = 2
 
 cloudstream {
     description = "TrixHentai 18+ — hentai et animes pour adultes VOSTFR français, MP4 directs"

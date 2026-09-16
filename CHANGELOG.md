@@ -1,5 +1,36 @@
 # Journal des mises à jour
 
+## v11 — 2026-09-16 (Streamixx v3, Movix, Adkami Hentai, HentaiStream, ⚙ URL partout)
+
+### 🔧 StreamixxProvider v3 — « fiche introuvable » et « recherche absente » réparés
+- **CloudflareKiller sur toutes les requêtes** (pages ET passerelle API) : les fiches ne disparaissent plus quand le site arme son bouclier.
+- **Passerelle API redécouverte automatiquement** : si le worker change, l'extension le retrouve dans le bundle JS du site (cache 24 h) puis **retente** la requête — plus de « fiche introuvable » après un changement de domaine côté site.
+- **Recherche réparée** : espaces encodés en `%20` (l'ancienne requête avec `+` renvoyait zéro résultat).
+
+### 🆕 MovixProvider v1 — films & séries VF/VOSTFR (site demandé)
+- movix.zip : **Tendances, Films, Séries, Top IMDb** (paginés) + recherche complète.
+- Multi-serveurs par titre avec **versions** (TRUEFRENCH · VF · VOSTFR) : vidzy (HLS XOR décrypté), dood, voe, filemoon, uqload, multiup… via les extracteurs intégrés + extraction générique.
+- Séries : toutes les saisons via l'API Livewire du site, épisodes paginés correctement.
+- **⚙ Réglage d'URL** (bouton ⚙) si le domaine change.
+
+### 🆕 AdkamiHentaiProvider v1 — hentai VOSTFR/raw (demande « re-analyser adkami »)
+- hentai.adkami.com : **Nouveautés, Catalogue complet** (200/page) + recherche (API du site).
+- Fiches : synopsis, genres, studio, note, épisodes VOSTFR/raw avec vignettes.
+- Lecteur : décodeur reversé dans main.min.js (base64 + formule `(175^o)−clé`) appliqué aux iframes `data-src`/`data-litespeed-src`/`data-url`, puis extracteurs intégrés. ⚠ Le site masque les lecteurs aux visiteurs non connectés depuis certaines IP (« licencié ou aucune vidéo ») : si un épisode n'a pas de source côté site, aucune app ne peut l'inventer — catalogue et fiches restent utilisables.
+- **⚙ Réglage d'URL** + cookie nsfw + CloudflareKiller.
+
+### 🆕 HentaiStreamProvider v1 — hentai EN sous-titré (demande « plus de hentai »)
+- hentaistream.io : **Derniers + 8 genres** (harem, bdsm, yuri, yaoi, ahegao…) + recherche paginée.
+- Chaîne vidéo entièrement crackée : iframe player → jeton `sha512-` → **3× (ROT13 → base64)** → POST api.php (form-urlencodé strict) → **m3u8 multi-qualités**.
+- Épisodes avec vignettes individuelles ; **⚙ Réglage d'URL** + CloudflareKiller.
+
+### 🔁 Règle permanente appliquée : ⚙ changement d'URL sur CHAQUE extension
+- **TrixHentaiProvider v2** et **PornovoreProvider v2** reçoivent le bouton ⚙ (adresse modifiable sans réinstaller, bouton « Par défaut » inclus), comme toutes les extensions récentes (Streamixx, AdkamiHentai, HentaiStream, Movix…).
+
+### 📚 TUTO
+- §4.17 adkami (décodeur marqueur-youtube) · §4.18 Livewire (snapshot échappé, updateSeason, piège du modal de recherche) · §4.19 hentaistream.io (ROT13×3 + form strict) · §4.20 vidzy (deux syntaxes d'appel, loadExtractor avant genericExtract).
+
+---
 ## v10.1 — 2026-09-16 (correctif Streamixx + NSFW français)
 
 ### 🔧 StreamixxProvider v2 — catalogue réparé

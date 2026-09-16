@@ -11,6 +11,7 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
@@ -183,6 +184,10 @@ class StreamixxProvider : MainAPI() {
 
     override var mainUrl = DEFAULT_URL
     override var name = "Streamixx"
+
+    // La passerelle workers.dev peut être défiée par Cloudflare selon le réseau
+    // (même cause que les autres sites : le défi passe via WebView).
+    private val cfKiller by lazy { CloudflareKiller() }
     override val hasMainPage = true
     override var lang = "fr"
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
@@ -198,44 +203,49 @@ class StreamixxProvider : MainAPI() {
         "Origin" to mainUrl
     )
 
-    /**
-     * Passerelle API effective : réglage manuel prioritaire, sinon la
-     * dernière découverte (cache 24 h), sinon on redécouvre l'URL dans le
-     * bundle JS du site (le worker peut changer), sinon la valeur par défaut.
-     */
-    private suspend fun apiUrl(forceRefresh: Boolean = false): String {
+    /** Passerelle résolue SANS réseau : réglage manuel > cache (24 h) > défaut. */
+    private fun apiUrl(): String {
         manualApi()?.let { return it }
-        val prefs = appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
-        if (!forceRefresh) {
-            val cached = runCatching {
-                val ts = prefs?.getLong("discovered_ts", 0L) ?: 0L
-                val gw = prefs?.getString("discovered_api", null)
-                if (gw != null && System.currentTimeMillis() - ts < 24 * 3600_000L) gw else null
-            }.getOrNull()
-            if (cached != null) return cached
-        }
-        val discovered = runCatching {
-            val home = app.get(mainUrl, headers = headers()).text
-            val bundle = Regex("""(/assets/index-[A-Za-z0-9_-]+\.js)""").find(home)?.groupValues?.get(1)
-                ?: return@runCatching null
-            val js = app.get("$mainUrl$bundle", headers = headers()).text
-            Regex("""https://[a-z0-9-]+\.workers\.dev""").find(js)?.value
+        val cached = runCatching {
+            val prefs = appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            val ts = prefs?.getLong("discovered_ts", 0L) ?: 0L
+            val gw = prefs?.getString("discovered_api", null)
+            if (gw != null && System.currentTimeMillis() - ts < 24 * 3600_000L) gw else null
         }.getOrNull()
-        if (discovered != null) {
-            runCatching {
-                prefs?.edit()?.putString("discovered_api", discovered)
-                    ?.putLong("discovered_ts", System.currentTimeMillis())?.apply()
-            }
-            return discovered
-        }
-        return DEFAULT_API
+        return cached ?: DEFAULT_API
     }
 
-    /** GET JSON avec un essai de rattrapage si la passerelle ne répond plus. */
+    /** Invalide le cache et redécouvre la passerelle dans le bundle du site. */
+    private suspend fun rediscoverApi(): String? {
+        return runCatching {
+            val prefs = appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            prefs?.edit()?.remove("discovered_api")?.remove("discovered_ts")?.apply()
+            val home = app.get(mainUrl, headers = headers(), interceptor = cfKiller).text
+            val bundle = Regex("""(/assets/index-[A-Za-z0-9_-]+\.js)""").find(home)?.groupValues?.get(1)
+                ?: return@runCatching null
+            val js = app.get("$mainUrl$bundle", headers = headers(), interceptor = cfKiller).text
+            Regex("""https://[a-z0-9-]+\.workers\.dev""").find(js)?.value?.also { gw ->
+                runCatching {
+                    prefs?.edit()?.putString("discovered_api", gw)
+                        ?.putLong("discovered_ts", System.currentTimeMillis())?.apply()
+                }
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * GET JSON avec rattrapage : si la passerelle résolue ne répond plus, on
+     * invalide le cache, on redécouvre l'URL dans le bundle du site et on
+     * réessaie ; en dernier recours on retente la valeur par défaut.
+     */
     private suspend fun apiGet(path: String): String? {
-        val first = runCatching { app.get("${apiUrl()}$path", headers = headers()).text }.getOrNull()
+        val first = runCatching {
+            app.get("${apiUrl()}$path", headers = headers(), interceptor = cfKiller).text
+        }.getOrNull()
         if (first != null) return first
-        val second = runCatching { app.get("${apiUrl(forceRefresh = true)}$path", headers = headers()).text }.getOrNull()
+        val second = runCatching {
+            app.get("${rediscoverApi() ?: DEFAULT_API}$path", headers = headers(), interceptor = cfKiller).text
+        }.getOrNull()
         return second
     }
 
@@ -290,7 +300,7 @@ class StreamixxProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         syncUrl()
-        val q = java.net.URLEncoder.encode(query.trim(), "UTF-8")
+        val q = java.net.URLEncoder.encode(query.trim(), "UTF-8").replace("+", "%20")
         val json = apiGet("/api/search/$q?page=1&perPage=24&type=0") ?: return emptyList()
         val env = runCatching { AppUtils.parseJson<SmxEnvelope<SmxSearchData>>(json) }.getOrNull()
         return env?.data?.items.orEmpty().mapNotNull { it.toCard() }

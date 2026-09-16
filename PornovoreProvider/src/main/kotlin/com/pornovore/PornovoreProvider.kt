@@ -37,16 +37,65 @@ import com.lagradost.cloudstream3.utils.Qualities
 @CloudstreamPlugin
 class PornovorePlugin : Plugin() {
     override fun load(context: android.content.Context) {
+        PornovoreProvider.appContext = context.applicationContext
         registerMainAPI(PornovoreProvider())
+        openSettings = { ctx -> PornovoreProvider.showSettings(ctx) }
     }
 }
 
 class PornovoreProvider : MainAPI() {
-    override var mainUrl = "https://pornovore.fr"
+    companion object {
+        const val DEFAULT_URL = "https://pornovore.fr"
+
+        @Volatile
+        var appContext: android.content.Context? = null
+
+        private const val PREFS_NAME = "pornovore_settings"
+        private const val PREF_URL = "site_url"
+
+        fun currentUrl(): String = runCatching {
+            appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                ?.getString(PREF_URL, null)
+                ?.trim()?.trimEnd('/')
+                ?.takeIf { it.startsWith("http") }
+        }.getOrNull() ?: DEFAULT_URL
+
+        fun setSiteUrl(context: android.content.Context, url: String?) {
+            context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_URL, url?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") })
+                .apply()
+        }
+
+        fun showSettings(context: android.content.Context) {
+            val input = android.widget.EditText(context).apply {
+                setText(currentUrl()); hint = "https://pornovore.fr"
+            }
+            val pad = (context.resources.displayMetrics.density * 20).toInt()
+            val layout = android.widget.LinearLayout(context).apply {
+                setPadding(pad, pad / 2, pad, 0)
+                addView(input)
+            }
+            android.app.AlertDialog.Builder(context)
+                .setTitle("Adresse de Pornovore")
+                .setMessage("Si le site change de domaine, indiquez l'adresse actuelle.")
+                .setView(layout)
+                .setPositiveButton("Enregistrer") { _, _ -> setSiteUrl(context, input.text.toString()) }
+                .setNegativeButton("Annuler", null)
+                .setNeutralButton("Par défaut") { _, _ -> setSiteUrl(context, DEFAULT_URL) }
+                .show()
+        }
+    }
+
+    override var mainUrl = DEFAULT_URL
     override var name = "Pornovore"
     override val hasMainPage = true
     override var lang = "fr"
     override val supportedTypes = setOf(TvType.NSFW)
+
+    private fun syncUrl() {
+        mainUrl = currentUrl()
+    }
 
     private val baseHeaders = mapOf(
         "User-Agent" to USER_AGENT,
@@ -96,6 +145,7 @@ class PornovoreProvider : MainAPI() {
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        syncUrl()
         val (cat, slug) = request.data.split("|")
         val url = if (page <= 1) "$mainUrl/$cat/$slug"
         else "$mainUrl/$cat/$slug-page$page"
@@ -106,6 +156,7 @@ class PornovoreProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
+        syncUrl()
         val q = java.net.URLEncoder.encode(query.trim(), "UTF-8")
         if (q.isEmpty()) return emptyList()
         val html = runCatching {
@@ -115,6 +166,7 @@ class PornovoreProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse {
+        syncUrl()
         val html = runCatching { app.get(url, headers = baseHeaders).text }.getOrNull()
             ?: throw com.lagradost.cloudstream3.ErrorLoadingException("Fiche introuvable")
         val title = Regex("""<h1[^>]*>([^<]+)</h1>""").find(html)?.groupValues?.get(1)
@@ -141,6 +193,7 @@ class PornovoreProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        syncUrl()
         // 1) page vidéo → embedUrl du player (JSON-LD VideoObject)
         val html = runCatching { app.get(data, headers = baseHeaders).text }.getOrNull() ?: return false
         val embed = Regex(""""embedUrl"\s*:\s*"([^"]+)"""").find(html)?.groupValues?.get(1)
