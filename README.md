@@ -37,8 +37,8 @@
 <details>
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
-- repo.json : `https://x0.at/HP0i.json`
-- plugins.json (liste des extensions) : `https://x0.at/BX0Y.json`
+- repo.json (v11, 23 sources) : `https://x0.at/ne26.json`
+- plugins.json (liste des 23 extensions, v11) : `https://x0.at/7TJS.json`
 - WaveWatch v7 : `https://x0.at/dDfv.cs3` · Zenix v8 : `https://x0.at/tYS4.cs3` · 1JOUR1FILM v6 : `https://x0.at/jWyq.cs3` · CineStream v5 : `https://x0.at/h484.cs3` · Télé FR Direct v2 (Madagascar 🇲🇬) : `https://x0.at/MpNP.cs3` · AnimeSama v6 : `https://x0.at/i1wf.cs3` · AnimeSite v5 : `https://x0.at/ABrQ.cs3` · FrenchStream v5 : `https://x0.at/943P.cs3` · Purstream v5 : `https://x0.at/yD9r.cs3` · Vostfree v4 : `https://x0.at/Mozr.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.
@@ -53,10 +53,13 @@ Les adresses des miroirs sont re-publiées à chaque version.
 
 Ce dépôt ne fait qu'indexer des sites publics tiers ; il n'héberge aucun contenu. À usage strictement personnel — respectez les lois de votre pays.
 
-### Miroirs des nouveautés v10.1 (x0.at)
-- StreamixxProvider.cs3 (v2) : `https://x0.at/56ZY.cs3`
-- TrixHentaiProvider.cs3 : `https://x0.at/KyV7.cs3`
-- PornovoreProvider.cs3 : `https://x0.at/VFKZ.cs3`
+### Miroirs des nouveautés v11 (x0.at)
+- StreamixxProvider.cs3 (v3 — fiches + recherche réparées) : `https://x0.at/NLVq.cs3`
+- MovixProvider.cs3 (v1) : `https://x0.at/YEv5.cs3`
+- AdkamiHentaiProvider.cs3 (v1) : `https://x0.at/VBSD.cs3`
+- HentaiStreamProvider.cs3 (v1) : `https://x0.at/wu0p.cs3`
+- TrixHentaiProvider.cs3 (v2 — ⚙ URL) : `https://x0.at/M6ld.cs3`
+- PornovoreProvider.cs3 (v2 — ⚙ URL) : `https://x0.at/cWUp.cs3`
 
 ### Miroirs v10 (x0.at)
 - StreamixxProvider.cs3 : `https://x0.at/LWSa.cs3`
