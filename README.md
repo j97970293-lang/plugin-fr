@@ -21,7 +21,7 @@
 | **HentaiCityProvider** | hentaicity.com | 🔞 hentai & 3D animés — HLS directs |
 | **HentaiHavenProvider** | hentaihaven.xxx | 🔞 Rule34 animé — HLS directs |
 | **XvideosProvider** | xvideos.com | 🔞 vidéos amateurs & studios — HLS directs |
-| **MovixProvider** | movix.zip | films & séries — versions TRUEFRENCH/VF/VOSTFR, multi-serveurs |
+| **MovixProvider** | movix.men | films & séries VF — 13+ serveurs réels par contenu + agrégateur |
 | **TrixHentaiProvider** | trixhentai.com | 🔞 hentai **VOSTFR** — MP4 directs |
 | **PornovoreProvider** | pornovore.fr | 🔞 films X **français** — MP4 directs |
 | **AdkamiHentaiProvider** | hentai.adkami.com | 🔞 hentai **VOSTFR/raw** — catalogue Adkami |

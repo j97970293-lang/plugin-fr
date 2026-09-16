@@ -1032,3 +1032,24 @@ archivées, `web.archive.org/web/2026/https://…`), structure = cartes Cactus
    transitoire est passé).
 
 
+### 4.26 VÉRIFIER LE DOMAINE OFFICIEL AVANT DE CODER (Movix v5)
+
+Le symptôme classique du **clone périmé** : tout le pipeline marche (pages, fiches, listes de
+serveurs) mais AUCUN flux ne sort — les serveurs listés sont morts depuis des mois. Avant de
+s'acharner sur l'extraction :
+1. **Cherchez la page « adresse officielle » du site** (les sites de streaming en changent
+   souvent) : movix.online est une page d'annonce qui pointe vers le domaine 2026 (movix.men).
+   Le site dans l'extension (movix.zip) était un clone figé.
+2. **Site SPA (React/Vite) ? Ne scrapez pas le HTML** — le rendu est côté client :
+   - listez les bundles (`/assets/*.js`) depuis le HTML puis les noms de chunks dans le bundle
+     principal ;
+   - cherchez `api.` dans les bundles : l'API officielle (`api.movix.men/api/tmdb/…`) sert
+     les données JSON directement (7-13 hébergeurs par contenu, `player_links[].decoded_url`) ;
+   - le catalogue passe souvent par **TMDB avec la clé publique du site** (cherchez
+     `api_key=` dans le bundle) → listes/recherche/fiches parfaites en français.
+3. Le « lecteur interne » du site (lecteurvideo.com) peut être protégé Turnstile (403) :
+   inutile de s'y acharner, les player_links suffisent.
+4. IP datacenter ≠ IP mobile : voe.sx/uqload.cx renvoient 403 aux datacenters mais
+   fonctionnent sur IP résidentielle/mobile avec les extracteurs officiels.
+
+

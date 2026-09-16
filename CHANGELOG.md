@@ -1,5 +1,17 @@
 # Journal des mises à jour
 
+## v11.4 — 2026-09-17 (Movix v5 : le VRAI site movix.men, refonte complète)
+
+### 🎬 MovixProvider v5 — refonte sur le vrai site
+- **movix.zip était un clone périmé** (serveurs morts) : le vrai site 2026 est **movix.men** (movix.online est la page d'annonce officielle). Extension réécrite depuis zéro sur sa vraie architecture :
+  - **Catalogue TMDB** (clé publique du site, `language=fr-FR`) : Films tendance · populaires · les mieux notés · prochainement · Séries tendance/populaires, paginé, + **recherche** multi (films & séries).
+  - **Fiches** TMDB complètes : synopsis FR, affiche, note, année, genres, durée ; séries = toutes les saisons/épisodes (titres FR, vignettes, résumé) chargées en parallèle.
+  - **Serveurs** : l'API officielle `api.movix.men` sert **7 à 13 hébergeurs réels par contenu** (uqload.cx, voe.sx, filemoon.sx, vidmoly, vidoza, veev.to, lulustream, wishonly, darkibox, emmmmbed, mivalyo, listeamed…) — interrogés **en parallèle**, chacun borné à 15 s.
+  - Contenu absent du site (« Contenu non disponible », animes, séries récentes) → **supplément agrégateur vidsrc.buzz** (HLS proxysés) via l'id TMDB directement.
+- Le contenu érotique populaire est bien servi (Emmanuelle 2024 : 13 serveurs · Cinquante nuances : 12) ; le très obscur (non uploadé) passe sur l'agrégateur.
+
+---
+
 ## v11.3 — 2026-09-16 (Movix v4, 18+ v3, agrégateur généralisé, Streamixx retiré)
 
 ### 🔧 MovixProvider v4 — recherche réparée + chargement accéléré
