@@ -1,5 +1,22 @@
 # Journal des mises à jour
 
+## v10.1 — 2026-09-16 (correctif Streamixx + NSFW français)
+
+### 🔧 StreamixxProvider v2 — catalogue réparé
+- **Correctif catalogue** : un champ de parsing mal typé vidait toutes les sections (l'API répondait, mais le JSON était rejeté). Le catalogue s'affiche désormais normalement.
+- **Sous-titres réparés** : les SRT signés du CDN sont désormais servis directement (l'ancien proxy renvoyait 404).
+- **⚙ Réglage d'URL intégré** (bouton ⚙ sur l'extension) : adresse du site ET de la passerelle API modifiables — la passerelle est aussi **redécouverte automatiquement** dans le bundle JS du site si le worker change (cache 24 h, rattrapage auto en cas de panne).
+
+### 🆕 NSFW français (TvType.NSFW — filtrées tant que « contenu adulte » est désactivé)
+- **TrixHentai 18+** (trixhentai.com) : hentai & animes pour adultes **VOSTFR** — 12 sections (VOSTFR, non censuré, futanari, Naruto, One Piece, Dragon Ball, MHA, Pokémon, yuri, cosplay, IA…), **MP4 directs**, recherche.
+- **Pornovore 18+** (pornovore.fr) : **films X français** (amateurs & stars du X françaises, scènes complètes 6-45 min) — 12 sections (Françaises, Beurettes, Amateurs, Asiatiques, Blacks, Latines, Lesbiennes, Stars du X…), **MP4 directs 360/468/720p**, recherche.
+- Les extensions 18+ anglaises de la v10 (HentaiCity, HentaiHaven, Xvideos) restent installées.
+
+### 🔍 Triage NSFW français (détaillé dans le TUTO §4.15)
+- hentai.adkami.com : catalogue OK mais player masqué aux IP datacenter → écarté ; hentaivost.fr : Cloudflare ; hentai-fap/hentai-paradise/maruchi : JS obfusqué ou scans → écartés.
+
+---
+
 ## v10 — 2026-09-16 (Streamixx, extensions 18+, francophonie)
 
 ### 🆕 StreamixxProvider v1 — films & séries MP4 directs + sous-titres

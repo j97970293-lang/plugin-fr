@@ -36,14 +36,19 @@ import com.lagradost.cloudstream3.utils.Qualities
 //   GET {api}/api/info/{subjectId}            → subject + seasons[{se,maxEp}]
 //   GET {api}/api/sources/{id}[?season=&episode=]
 //        → downloads[{url, resolution, size}] + captions[{lan, lanName, url}]
-//   GET {api}/api/caption?url=…               → sous-titres (VTT proxysé)
 // Les liens sont des MP4 directs (CDN hakunaymatata, signés) — 360/480/720p.
-// Les séries : seasons[].maxEp donne le nombre d'épisodes par saison.
+// Les sous-titres sont des SRT signés (CloudFront) servis DIRECTEMENT par le
+// CDN — ne pas passer par /api/caption (404 côté passerelle).
+// ⚙ Réglages : si le site change de domaine ou de passerelle, l'URL est
+// modifiable dans les réglages de l'extension ; la passerelle est aussi
+// redécouverte automatiquement dans le bundle JS du site.
 // ===========================================================================
 @CloudstreamPlugin
 class StreamixxPlugin : Plugin() {
     override fun load(context: android.content.Context) {
+        StreamixxProvider.appContext = context.applicationContext
         registerMainAPI(StreamixxProvider())
+        openSettings = { ctx -> StreamixxProvider.showSettings(ctx) }
     }
 }
 
@@ -65,11 +70,10 @@ data class SmxSubject(
     val subtitles: String? = null
 )
 
+// ⚠️ NE PAS déclarer `pager` : ses valeurs sont mixtes (booléens + entiers),
+// un Map<String,String> ferait échouer Jackson et viderait tout le catalogue.
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class SmxTrendingData(
-    val subjectList: List<SmxSubject>? = null,
-    val pager: Map<String, String>? = null
-)
+data class SmxTrendingData(val subjectList: List<SmxSubject>? = null)
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class SmxSearchData(val items: List<SmxSubject>? = null)
@@ -92,8 +96,9 @@ data class SmxInfoData(
     val totalEpisodes: Int? = null
 )
 
+// size non déclaré : c'est une chaîne côté API et elle ne sert à rien ici
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class SmxDownload(val url: String? = null, val resolution: Int? = null, val size: Long? = null)
+data class SmxDownload(val url: String? = null, val resolution: Int? = null)
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class SmxCaption(val lan: String? = null, val lanName: String? = null, val url: String? = null)
@@ -105,22 +110,134 @@ data class SmxSourcesData(val downloads: List<SmxDownload>? = null, val captions
 data class SmxEnvelope<T>(val status: String? = null, val data: T? = null)
 
 class StreamixxProvider : MainAPI() {
-    override var mainUrl = "https://www.streamixx.xyz"
+    companion object {
+        const val DEFAULT_URL = "https://www.streamixx.xyz"
+        const val DEFAULT_API = "https://mbx-core-gateway-v2.mymovieroom.workers.dev"
+
+        @Volatile
+        var appContext: android.content.Context? = null
+
+        private const val PREFS_NAME = "streamixx_settings"
+        private const val PREF_URL = "site_url"
+        private const val PREF_API = "api_url"
+
+        fun currentUrl(): String = runCatching {
+            appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                ?.getString(PREF_URL, null)
+                ?.trim()?.trimEnd('/')
+                ?.takeIf { it.startsWith("http") }
+        }.getOrNull() ?: DEFAULT_URL
+
+        fun currentApi(): String = manualApi() ?: DEFAULT_API
+
+        fun manualApi(): String? = runCatching {
+            appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                ?.getString(PREF_API, null)
+                ?.trim()?.trimEnd('/')
+                ?.takeIf { it.startsWith("http") }
+        }.getOrNull()
+
+        fun setUrls(context: android.content.Context, site: String?, api: String?) {
+            context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_URL, site?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") })
+                .putString(PREF_API, api?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") })
+                .apply()
+        }
+
+        fun showSettings(context: android.content.Context) {
+            val inputSite = android.widget.EditText(context).apply {
+                setText(currentUrl()); hint = "https://streamixx…"
+            }
+            val inputApi = android.widget.EditText(context).apply {
+                setText(currentApi()); hint = "https://…workers.dev (vide = auto)"
+            }
+            val pad = (context.resources.displayMetrics.density * 20).toInt()
+            val layout = android.widget.LinearLayout(context).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(pad, pad / 2, pad, 0)
+                addView(android.widget.TextView(context).apply { text = "Adresse du site" })
+                addView(inputSite)
+                addView(android.widget.TextView(context).apply {
+                    text = "Passerelle API (laisser vide pour la détection automatique)"
+                    setPadding(0, pad / 2, 0, 0)
+                })
+                addView(inputApi)
+            }
+            android.app.AlertDialog.Builder(context)
+                .setTitle("Réglages Streamixx")
+                .setMessage("Si le site change de domaine ou de passerelle, indiquez les adresses actuelles.")
+                .setView(layout)
+                .setPositiveButton("Enregistrer") { _, _ ->
+                    setUrls(
+                        context,
+                        inputSite.text.toString().ifBlank { DEFAULT_URL },
+                        inputApi.text.toString()
+                    )
+                }
+                .setNegativeButton("Annuler", null)
+                .setNeutralButton("Par défaut") { _, _ -> setUrls(context, DEFAULT_URL, DEFAULT_API) }
+                .show()
+        }
+    }
+
+    override var mainUrl = DEFAULT_URL
     override var name = "Streamixx"
     override val hasMainPage = true
     override var lang = "fr"
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
-    private val apiUrl = "https://mbx-core-gateway-v2.mymovieroom.workers.dev"
+    private fun syncUrl() {
+        mainUrl = currentUrl()
+    }
 
-    private val baseHeaders = mapOf(
+    private fun headers() = mapOf(
         "User-Agent" to USER_AGENT,
         "Accept" to "application/json",
         "Referer" to "$mainUrl/",
         "Origin" to mainUrl
     )
 
-    private val mapper by lazy { com.fasterxml.jackson.databind.ObjectMapper() }
+    /**
+     * Passerelle API effective : réglage manuel prioritaire, sinon la
+     * dernière découverte (cache 24 h), sinon on redécouvre l'URL dans le
+     * bundle JS du site (le worker peut changer), sinon la valeur par défaut.
+     */
+    private suspend fun apiUrl(forceRefresh: Boolean = false): String {
+        manualApi()?.let { return it }
+        val prefs = appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        if (!forceRefresh) {
+            val cached = runCatching {
+                val ts = prefs?.getLong("discovered_ts", 0L) ?: 0L
+                val gw = prefs?.getString("discovered_api", null)
+                if (gw != null && System.currentTimeMillis() - ts < 24 * 3600_000L) gw else null
+            }.getOrNull()
+            if (cached != null) return cached
+        }
+        val discovered = runCatching {
+            val home = app.get(mainUrl, headers = headers()).text
+            val bundle = Regex("""(/assets/index-[A-Za-z0-9_-]+\.js)""").find(home)?.groupValues?.get(1)
+                ?: return@runCatching null
+            val js = app.get("$mainUrl$bundle", headers = headers()).text
+            Regex("""https://[a-z0-9-]+\.workers\.dev""").find(js)?.value
+        }.getOrNull()
+        if (discovered != null) {
+            runCatching {
+                prefs?.edit()?.putString("discovered_api", discovered)
+                    ?.putLong("discovered_ts", System.currentTimeMillis())?.apply()
+            }
+            return discovered
+        }
+        return DEFAULT_API
+    }
+
+    /** GET JSON avec un essai de rattrapage si la passerelle ne répond plus. */
+    private suspend fun apiGet(path: String): String? {
+        val first = runCatching { app.get("${apiUrl()}$path", headers = headers()).text }.getOrNull()
+        if (first != null) return first
+        val second = runCatching { app.get("${apiUrl(forceRefresh = true)}$path", headers = headers()).text }.getOrNull()
+        return second
+    }
 
     override val mainPage = mainPageOf(
         "trending" to "🔥 Tendances",
@@ -146,21 +263,20 @@ class StreamixxProvider : MainAPI() {
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        syncUrl()
         val items: List<SearchResponse> = when (request.data) {
             "top" -> {
                 if (page > 1) return newHomePageResponse(request, emptyList(), false)
-                val json = runCatching {
-                    app.get("$apiUrl/api/homepage", headers = baseHeaders).text
-                }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
+                val json = apiGet("/api/homepage")
+                    ?: return newHomePageResponse(request, emptyList(), false)
                 val data = runCatching {
                     AppUtils.parseJson<SmxEnvelope<SmxHomeData>>(json)
                 }.getOrNull()?.data
                 data?.topPickList.orEmpty().mapNotNull { it.toCard() }
             }
             else -> {
-                val json = runCatching {
-                    app.get("$apiUrl/api/trending?page=${page - 1}&perPage=36", headers = baseHeaders).text
-                }.getOrNull() ?: return newHomePageResponse(request, emptyList(), false)
+                val json = apiGet("/api/trending?page=${page - 1}&perPage=36")
+                    ?: return newHomePageResponse(request, emptyList(), false)
                 val env = runCatching { AppUtils.parseJson<SmxEnvelope<SmxTrendingData>>(json) }.getOrNull()
                 env?.data?.subjectList.orEmpty().mapNotNull { it.toCard() }
             }
@@ -173,19 +289,18 @@ class StreamixxProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
+        syncUrl()
         val q = java.net.URLEncoder.encode(query.trim(), "UTF-8")
-        val json = runCatching {
-            app.get("$apiUrl/api/search/$q?page=1&perPage=24&type=0", headers = baseHeaders).text
-        }.getOrNull() ?: return emptyList()
+        val json = apiGet("/api/search/$q?page=1&perPage=24&type=0") ?: return emptyList()
         val env = runCatching { AppUtils.parseJson<SmxEnvelope<SmxSearchData>>(json) }.getOrNull()
         return env?.data?.items.orEmpty().mapNotNull { it.toCard() }
     }
 
     override suspend fun load(url: String): LoadResponse {
+        syncUrl()
         val id = url.removePrefix("smx:").substringBefore(':')
-        val json = runCatching {
-            app.get("$apiUrl/api/info/$id", headers = baseHeaders).text
-        }.getOrNull() ?: throw com.lagradost.cloudstream3.ErrorLoadingException("Fiche introuvable")
+        val json = apiGet("/api/info/$id")
+            ?: throw com.lagradost.cloudstream3.ErrorLoadingException("Fiche introuvable")
         val env = runCatching { AppUtils.parseJson<SmxEnvelope<SmxInfoData>>(json) }.getOrNull()
         val info = env?.data ?: throw com.lagradost.cloudstream3.ErrorLoadingException("Fiche introuvable")
         val subject = info.subject ?: throw com.lagradost.cloudstream3.ErrorLoadingException("Fiche introuvable")
@@ -243,14 +358,13 @@ class StreamixxProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        syncUrl()
         val parts = data.removePrefix("smx:").split(":")
         val id = parts.getOrNull(0) ?: return false
         val season = parts.getOrNull(1)?.toIntOrNull()
         val episode = parts.getOrNull(2)?.toIntOrNull()
         val qs = if (season != null && episode != null) "?season=$season&episode=$episode" else ""
-        val json = runCatching {
-            app.get("$apiUrl/api/sources/$id$qs", headers = baseHeaders).text
-        }.getOrNull() ?: return false
+        val json = apiGet("/api/sources/$id$qs") ?: return false
         val env = runCatching { AppUtils.parseJson<SmxEnvelope<SmxSourcesData>>(json) }.getOrNull()
         val d = env?.data ?: return false
         var found = false
@@ -272,17 +386,12 @@ class StreamixxProvider : MainAPI() {
                 )
             )
         }
+        // Les sous-titres sont des SRT signés servis directement par le CDN
+        // (le proxy /api/caption de la passerelle renvoie 404).
         d.captions.orEmpty().forEach { cap ->
             val u = cap.url?.takeIf { it.startsWith("http") } ?: return@forEach
             val lang = cap.lan?.takeIf { it.isNotBlank() } ?: "en"
-            runCatching {
-                subtitleCallback(
-                    SubtitleFile(
-                        lang,
-                        "$apiUrl/api/caption?url=${java.net.URLEncoder.encode(u, "UTF-8")}"
-                    )
-                )
-            }
+            runCatching { subtitleCallback(SubtitleFile(lang, u)) }
         }
         return found
     }

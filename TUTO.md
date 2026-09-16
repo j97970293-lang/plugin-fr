@@ -817,3 +817,50 @@ recherche neutralisée par bot shield), Vostfree v1 (blocs buttons_/player_,
 346 épisodes One Piece), AnimeSama v1 (panneauAnime, episodes.js, miroirs),
 et le triage des 9 sites du 14 sept. 2026 (4 intégrés, 3 enrichis, 5 écartés
 pour cause de Turnstile/veske.io/SPA/bot shield/redondance).*
+
+
+### 4.14 UN CHAMP DE TROP VIDE TOUT LE CATALOGUE (Streamixx v2, leçon Jackson)
+
+Le catalogue Streamixx était vide alors que l'API répondait 200 : le DTO
+déclarait `pager: Map<String, String>` alors que le JSON réel mélange
+booléens (`hasMore`), entiers (`perPage`) et chaînes → Jackson lève une
+MismatchedInputException, `runCatching { parseJson<…> }.getOrNull()`
+avale l'erreur, et la liste reste vide. **Règle : ne déclarer que les
+champs réellement utilisés** (ignoreUnknown=true couvre le reste), et
+vérifier chaque endpoint avec les types EXACTS du JSON avant d'écrire
+les DTO. Même famille de piège : les URLs échappées `https:\/\/…`
+dans un JSON brut cassent les regex `https://…` (HentaiHaven, player
+Pornovore) — toujours `.replace("\\/", "/")` avant de matcher.
+
+### 4.15 NSFW FRANÇAIS : TRIER LES FAUX SITES ET TOUT VÉRIFIER (v10.1)
+
+La demande « NSFW en français comme adkami » a donné un triage complet
+du paysage français :
+- **Intégrés (vérifiés de bout en bout)** : trixhentai.com (WordPress
+  VideoTube, MP4 directs dans le setup jwplayer, catégories paginées,
+  recherche `/?s=`) et pornovore.fr (tube maison FR : cartes
+  `bloc-video` → JSON-LD `embedUrl` → page player avec
+  `window.player_args.push({…})` contenant des MP4 signés 720/468/360 ;
+  recherche `/recherche/{q}` ; pagination `-page{n}` collée au slug).
+- **hentai.adkami.com** : catalogue + recherche OK mais le player
+  (« L'anime est licencié ou aucune vidéo ») est masqué aux IP
+  datacenter — même les animes du domaine principal. Cookie `nsfw=true`
+  sans effet. Inexploitable sans structure de player vérifiable → écarté
+  (cf. §4.9 : ne jamais coder un lecteur qu'on n'a pas vu).
+- **hentaivost.fr** : Cloudflare « Just a moment » (403) sur toutes les
+  pages depuis un datacenter.
+- **hentai-fap.fr / hentai-paradise.fr / maruchihentai.cc** : templates
+  « kitsune » tout-client (JS packé/obfusqué, zéro lien serveur) ou
+  lecteurs de scans (pas vidéo) → écartés. La vidéo réelle est sur
+  video.hentai-manga.io (403 direct).
+- **Adresses mortes ou hors sujet** : hentaihaven.fr (= jeu Hentai
+  Heroes), hentaifr.net (site d'actualité), aki-h.com (EN/Thaï).
+
+### 4.16 SOUS-TITRES : TOUJOURS TESTER LE PROXY ANNONCÉ (Streamixx v2)
+
+Le bundle de la SPA construit des URLs de sous-titres `/api/caption?
+url=…` — mais cette route 404 sur le site ET sur la passerelle (le
+service worker qui la servait est désactivé par le site lui-même).
+En revanche les URLs `…srt?Policy=…` du CDN CloudFront sont signées et
+téléchargeables directement : CloudStream accepte le SRT tel quel.
+Vérifier le format renvoyé par le proxy AVANT de l'utiliser.
