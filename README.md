@@ -38,8 +38,8 @@
 <details>
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
-- repo.json (v11.3, 24 sources) : `https://x0.at/Ivfj.json`
-- plugins.json (liste des 24 extensions, v11.3) : `https://x0.at/Z4A3.json`
+- repo.json (v11.3, 24 sources) : `https://x0.at/dyyE.json`
+- plugins.json (liste des 24 extensions, v11.3) : `https://x0.at/WL47.json`
 - WaveWatch v7 : `https://x0.at/dDfv.cs3` · Zenix v8 : `https://x0.at/tYS4.cs3` · 1JOUR1FILM v6 : `https://x0.at/jWyq.cs3` · CineStream v5 : `https://x0.at/h484.cs3` · Télé FR Direct v2 (Madagascar 🇲🇬) : `https://x0.at/MpNP.cs3` · AnimeSama v6 : `https://x0.at/i1wf.cs3` · AnimeSite v5 : `https://x0.at/ABrQ.cs3` · FrenchStream v5 : `https://x0.at/943P.cs3` · Purstream v5 : `https://x0.at/yD9r.cs3` · Vostfree v4 : `https://x0.at/Mozr.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.
@@ -53,6 +53,13 @@ Les adresses des miroirs sont re-publiées à chaque version.
 ## Avertissement
 
 Ce dépôt ne fait qu'indexer des sites publics tiers ; il n'héberge aucun contenu. À usage strictement personnel — respectez les lois de votre pays.
+
+### Miroirs des nouveautés v11.3 (x0.at)
+- MovixProvider.cs3 (v4 — recherche réparée + chargement parallèle) : `https://x0.at/Lm5H.cs3`
+- HentaiFapProvider.cs3 (v3 — sections + retry) : `https://x0.at/eqU8.cs3`
+- HentaiVostProvider.cs3 (v3 — sections + retry) : `https://x0.at/eaCc.cs3`
+- PurstreamProvider.cs3 (v6 — agrégateur) : `https://x0.at/dI9D.cs3`
+- FrenchStreamProvider.cs3 (v6 — agrégateur films) : `https://x0.at/DsHj.cs3`
 
 ### Miroirs des nouveautés v11.2 (x0.at)
 - MovixProvider.cs3 (v3 — supplément agrégateur multi-serveurs) : `https://x0.at/8uMp.cs3`
