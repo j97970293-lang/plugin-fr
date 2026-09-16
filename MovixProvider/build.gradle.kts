@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 1
+version = 2
 
 cloudstream {
     description = "Movix — films et séries VF/VOSTFR (serveurs multiples, versions TRUEFRENCH/VF/VOSTFR)"

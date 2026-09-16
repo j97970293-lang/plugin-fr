@@ -102,10 +102,22 @@ data class SmxInfoData(
 data class SmxDownload(val url: String? = null, val resolution: Int? = null)
 
 @JsonIgnoreProperties(ignoreUnknown = true)
+data class SmxProcessed(
+    val quality: Int? = null,
+    val directUrl: String? = null,
+    val streamUrl: String? = null,
+    val url: String? = null
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class SmxCaption(val lan: String? = null, val lanName: String? = null, val url: String? = null)
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class SmxSourcesData(val downloads: List<SmxDownload>? = null, val captions: List<SmxCaption>? = null)
+data class SmxSourcesData(
+    val downloads: List<SmxDownload>? = null,
+    val processedSources: List<SmxProcessed>? = null,
+    val captions: List<SmxCaption>? = null
+)
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class SmxEnvelope<T>(val status: String? = null, val data: T? = null)
@@ -221,15 +233,25 @@ class StreamixxProvider : MainAPI() {
             val prefs = appContext?.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
             prefs?.edit()?.remove("discovered_api")?.remove("discovered_ts")?.apply()
             val home = app.get(mainUrl, headers = headers(), interceptor = cfKiller).text
-            val bundle = Regex("""(/assets/index-[A-Za-z0-9_-]+\.js)""").find(home)?.groupValues?.get(1)
-                ?: return@runCatching null
-            val js = app.get("$mainUrl$bundle", headers = headers(), interceptor = cfKiller).text
-            Regex("""https://[a-z0-9-]+\.workers\.dev""").find(js)?.value?.also { gw ->
-                runCatching {
-                    prefs?.edit()?.putString("discovered_api", gw)
-                        ?.putLong("discovered_ts", System.currentTimeMillis())?.apply()
+            // le domaine peut rediriger (xyz → www.xyz) : suivre et utiliser l'URL finale
+            val base = Regex("""https?://[^"\s]+""").find(home)?.let { _ -> mainUrl } ?: mainUrl
+            // passerelle : sous-domaines multi-niveaux (a-b.c.workers.dev)
+            val gwRegex = Regex("""https://[a-zA-Z0-9.-]+\.workers\.dev""")
+            // chercher dans TOUS les bundles index-*.js référencés par la page
+            val bundles = Regex("""(/assets/index-[A-Za-z0-9_-]+\.js)""").findAll(home).map { it.groupValues[1] }.distinct().toList()
+            for (b in bundles) {
+                val js = runCatching {
+                    app.get("$base$b", headers = headers(), interceptor = cfKiller).text
+                }.getOrNull() ?: continue
+                gwRegex.find(js)?.value?.let { gw ->
+                    runCatching {
+                        prefs?.edit()?.putString("discovered_api", gw)
+                            ?.putLong("discovered_ts", System.currentTimeMillis())?.apply()
+                    }
+                    return@runCatching gw
                 }
             }
+            null
         }.getOrNull()
     }
 
@@ -239,14 +261,26 @@ class StreamixxProvider : MainAPI() {
      * réessaie ; en dernier recours on retente la valeur par défaut.
      */
     private suspend fun apiGet(path: String): String? {
-        val first = runCatching {
-            app.get("${apiUrl()}$path", headers = headers(), interceptor = cfKiller).text
-        }.getOrNull()
-        if (first != null) return first
-        val second = runCatching {
-            app.get("${rediscoverApi() ?: DEFAULT_API}$path", headers = headers(), interceptor = cfKiller).text
-        }.getOrNull()
-        return second
+        // le worker est instable (reset/429 aléatoires) : on cascade les
+        // endpoints et on retente — direct, puis proxy moviex, puis
+        // passerelle redécouverte, puis défaut.
+        val candidates = linkedSetOf(apiUrl())
+        val rediscovered = rediscoverApi()
+        if (rediscovered != null) candidates.add(rediscovered)
+        candidates.add(DEFAULT_API)
+        for (base in candidates) {
+            for (suffix in listOf("", "/api/proxy/moviex")) {
+                val url = "$base$suffix$path"
+                repeat(2) {
+                    val r = runCatching {
+                        app.get(url, headers = headers(), interceptor = cfKiller).text
+                    }.getOrNull()
+                    // une réponse d'erreur d'API n'est pas un succès : vérifier
+                    if (r != null && !r.contains("\"status\":\"error\"")) return r
+                }
+            }
+        }
+        return null
     }
 
     override val mainPage = mainPageOf(
@@ -378,23 +412,36 @@ class StreamixxProvider : MainAPI() {
         val env = runCatching { AppUtils.parseJson<SmxEnvelope<SmxSourcesData>>(json) }.getOrNull()
         val d = env?.data ?: return false
         var found = false
-        d.downloads.orEmpty().forEach { dl ->
-            val u = dl.url?.takeIf { it.startsWith("http") } ?: return@forEach
+        fun q(res: Int?) = when {
+            (res ?: 0) >= 1080 -> Qualities.P1080.value
+            (res ?: 0) >= 720 -> Qualities.P720.value
+            (res ?: 0) >= 480 -> Qualities.P480.value
+            (res ?: 0) >= 360 -> Qualities.P360.value
+            else -> Qualities.Unknown.value
+        }
+        fun emit(u: String, res: Int?) {
+            if (!u.startsWith("http")) return
             found = true
-            val res = dl.resolution ?: 0
             callback(
                 ExtractorLink(
-                    name, name + " · ${res}p", u, "$mainUrl/",
-                    quality = when {
-                        res >= 1080 -> Qualities.P1080.value
-                        res >= 720 -> Qualities.P720.value
-                        res >= 480 -> Qualities.P480.value
-                        res >= 360 -> Qualities.P360.value
-                        else -> Qualities.Unknown.value
-                    },
+                    name, name + " · ${res ?: "?"}p", u, "$mainUrl/",
+                    quality = q(res),
                     type = if (".m3u8" in u) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                 )
             )
+        }
+        // format actuel : processedSources (directUrl prioritaire sur le flux
+        // proxysé) ; ancien format : downloads[].url
+        d.processedSources.orEmpty().forEach { ps ->
+            val u = ps.directUrl?.takeIf { it.startsWith("http") }
+                ?: ps.streamUrl?.takeIf { it.startsWith("http") }
+                ?: ps.url?.takeIf { it.startsWith("http") }
+            if (u != null) emit(u, ps.quality)
+        }
+        if (!found) {
+            d.downloads.orEmpty().forEach { dl ->
+                emit(dl.url ?: return@forEach, dl.resolution)
+            }
         }
         // Les sous-titres sont des SRT signés servis directement par le CDN
         // (le proxy /api/caption de la passerelle renvoie 404).

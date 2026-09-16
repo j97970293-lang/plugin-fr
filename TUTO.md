@@ -930,3 +930,44 @@ uqload, multiup, vidzy, flixeo…) : `loadExtractor` D'ABORD (extracteurs
 officiels), `genericExtract` SEULEMENT en fallback — et le callback de
 loadExtractor n'est PAS une coroutine : `newExtractorLink` (suspend) y
 est interdit, construire `ExtractorLink(...)` directement.
+
+
+### 4.21 UN WORKER QUI S'ÉTEINT AU HASARD : CASCADER LES SOURCES (Streamixx v4)
+
+Le symptôme « catalogue OK, fiche OK, zéro serveur » venait de TROIS causes
+empilées : (1) l'API avait migré vers `processedSources` (directUrl/streamUrl)
+et l'extension ne lisait que l'ancien `downloads` ; (2) le worker workers.dev
+répond par intermittence (reset/000, 429 rate-limit par IP — mortel derrière
+un CGNAT) ; (3) le regex de redécouverte `[a-z0-9-]+\.workers\.dev` ne
+pouvait JAMAIS matcher `mbx-core-gateway-v2.mymovieroom.workers.dev`
+(sous-domaine à points). Règles : lire le normalisateur du site (fonction
+`Gg()` du bundle : processedSources d'abord, downloads ensuite) ; cascader
+les endpoints (direct → proxy → redécouvert → défaut) avec retry ; regex de
+domaine TOUJOURS `[a-zA-Z0-9.-]+\.workers\.dev`.
+
+### 4.22 NPE SILENCIEUX : NE RECONSTRUISEZ JAMAIS UN EXTRACTORLINK (Movix v2)
+
+Renommer un lien d'extracteur (« Premium 1 · VF ») en reconstruisant
+`ExtractorLink(label, l.name, l.url, l.referer, l.quality, l.headers,
+l.extractorData, l.type, l.audioTracks)` → NPE garanti dès qu'un champ est
+null chez l'extracteur (le constructeur compile des
+`Intrinsics.checkNotNullParameter` sur headers/type/audioTracks — vérifiable
+au javap) → avalé par `runCatching` → **0 serveur sans crash**. Le callback
+de `loadExtractor` n'est PAS une coroutine (`newExtractorLink` y est
+interdit) : la seule relance sûre = `callback(l)` direct. Le renommage
+cosmétique ne vaut jamais la panne.
+
+### 4.23 RÉSEAU « HENTAI PARADISE » : SECURE_LINK + CSRF + PONT DE SLUGS (v11.1)
+
+Trois sites, un catalogue : hentaivost.fr (WordPress Cactus, Cloudflare),
+hentai-paradise.fr (portail — sa section streaming **redirige** vers
+hentai-fap.fr), hentai-fap.fr (kitsune, accessible). Chaîne vidéo validée :
+`div#stream_ep` (data-v fichier, data-f dossier, data-type clip?) →
+GET `/ajax/csrfToken.php` (X-Requested-With) → POST `/ajax/getlink.php`
+(`file=/movies/{f}/{v}` + X-CSRF-Token) → chemin **signé nginx**
+(`?st=…&e=…`) → `{server}{chemin}` = MP4 (206). Les slugs étant IDENTIQUES
+entre les miroirs, un provider CF-bloqué peut « emprunter » le lecteur de
+l'autre (`hentai-fap.fr/hentai-video/{slug}`). Pour la recon d'un site
+ derrière Cloudflare sans navigateur : **Wayback** (homepage + listes
+archivées, `web.archive.org/web/2026/https://…`), structure = cartes Cactus
+`<div class="picture-content">` + recherche WP `/?s=`.

@@ -1,6 +1,6 @@
 # Plugin fr · Dépôt d'extensions CloudStream
 
-**23 extensions** (films, séries, animes, TV live, 18+) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
+**25 extensions** (films, séries, animes, TV live, 18+) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
 
 | Extension | Site | Contenu |
 |---|---|---|
@@ -26,6 +26,8 @@
 | **TrixHentaiProvider** | trixhentai.com | 🔞 hentai **VOSTFR** — MP4 directs |
 | **PornovoreProvider** | pornovore.fr | 🔞 films X **français** — MP4 directs |
 | **AdkamiHentaiProvider** | hentai.adkami.com | 🔞 hentai **VOSTFR/raw** — catalogue Adkami |
+| **HentaiFapProvider** | hentai-fap.fr | 🔞 hentai **VOSTFR/VOSTA/RAW** — MP4 directs (streaming de hentai-paradise.fr) |
+| **HentaiVostProvider** | hentaivost.fr | 🔞 hentai **VOSTFR** — CloudflareKiller intégré |
 | **HentaiStreamProvider** | hentaistream.io | 🔞 hentai **EN sous-titré** — m3u8 multi-qualités |
 
 ## Installation

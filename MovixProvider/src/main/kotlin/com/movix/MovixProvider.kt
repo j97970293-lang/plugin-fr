@@ -111,6 +111,8 @@ class MovixProvider : MainAPI() {
         "Accept-Language" to "fr-FR,fr;q=0.9"
     )
 
+    private val cfKiller by lazy { com.lagradost.cloudstream3.network.CloudflareKiller() }
+
     private fun syncUrl() {
         mainUrl = currentUrl()
     }
@@ -146,7 +148,7 @@ class MovixProvider : MainAPI() {
             "trending", "top-imdb" -> "$mainUrl/${request.data}"
             else -> "$mainUrl/${request.data}?page=$page"
         }
-        val html = runCatching { app.get(base, headers = headers()).text }.getOrNull()
+        val html = runCatching { app.get(base, headers = headers(), interceptor = cfKiller).text }.getOrNull()
             ?: return newHomePageResponse(request, emptyList(), false)
         val items = parseCards(html)
         // trending/top-imdb : une seule page ; listes : ?page=N
@@ -162,7 +164,7 @@ class MovixProvider : MainAPI() {
         val q = java.net.URLEncoder.encode(query.trim(), "UTF-8")
         if (q.isEmpty()) return emptyList()
         val html = runCatching {
-            app.get("$mainUrl/search/$q", headers = headers()).text
+            app.get("$mainUrl/search/$q", headers = headers(), interceptor = cfKiller).text
         }.getOrNull() ?: return emptyList()
         return parseCards(html)
     }
@@ -184,7 +186,7 @@ class MovixProvider : MainAPI() {
     // -------------------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse {
         syncUrl()
-        val html = runCatching { app.get(url, headers = headers()).text }.getOrNull()
+        val html = runCatching { app.get(url, headers = headers(), interceptor = cfKiller).text }.getOrNull()
             ?: throw com.lagradost.cloudstream3.ErrorLoadingException("Fiche introuvable")
         val slug = url.trimEnd('/').substringAfterLast('/')
         val isSeries = "/tv-show/" in url
@@ -284,11 +286,27 @@ class MovixProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         syncUrl()
-        val html = runCatching { app.get(data, headers = headers()).text }.getOrNull() ?: return false
-        val videosJson = Regex("""const videos\s*=\s*(\[[\s\S]*?\]);""").find(html)?.groupValues?.get(1)
-            ?: return false
-        val videos = runCatching { AppUtils.parseJson<List<MvVideo>>(videosJson) }.getOrNull() ?: return false
+        val html = runCatching {
+            app.get(data, headers = headers(), interceptor = cfKiller).text
+        }.getOrNull() ?: return false
+        val videosJson = Regex("""(?:const|var|let)\s+videos\s*=\s*(\[[\s\S]*?\]);""").find(html)?.groupValues?.get(1)
+        val videos = videosJson?.let { runCatching { AppUtils.parseJson<List<MvVideo>>(it) }.getOrNull() }
         var found = false
+        // fallback : iframes d'embed visibles dans le HTML
+        if (videos.isNullOrEmpty()) {
+            Regex("""<iframe[^>]*\ssrc="(https?://[^"]+)"""").findAll(html).forEach { m ->
+                val u = m.groupValues[1]
+                if (u.contains("movix.zip") || u.contains("google") || u.contains("facebook")) return@forEach
+                runCatching {
+                    if (loadExtractor(u, data, subtitleCallback) { l ->
+                            found = true
+                            callback(l)
+                        }) found = true
+                }
+            }
+            if (found) return true
+        }
+        if (videos.isNullOrEmpty()) return false
         videos.forEach { v ->
             val link = v.link?.takeIf { it.startsWith("http") } ?: return@forEach
             val version = v.version?.takeIf { it.isNotBlank() } ?: ""
@@ -299,16 +317,10 @@ class MovixProvider : MainAPI() {
                 if (!v.label.isNullOrBlank()) append(" · ${v.label}")
             }
             runCatching {
-                // extracteurs connus (dood, voe, filemoon, uqload, multiup…) ;
-                // on renomme le lien avec le serveur + la version
+                // extracteurs connus (dood, voe, filemoon, uqload, multiup…)
                 if (loadExtractor(link, mainUrl, subtitleCallback) { l ->
                         found = true
-                        callback(
-                            ExtractorLink(
-                                label, l.name, l.url, l.referer, l.quality,
-                                l.headers, l.extractorData, l.type, l.audioTracks
-                            )
-                        )
+                        callback(l)
                     }) {
                     return@runCatching
                 }
@@ -334,7 +346,7 @@ class MovixProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean = runCatching {
-        val page = app.get(embedUrl, referer = mainUrl, headers = mapOf("user-agent" to USER_AGENT)).text
+        val page = app.get(embedUrl, referer = mainUrl, headers = mapOf("user-agent" to USER_AGENT), interceptor = cfKiller).text
         val links = LinkedHashSet<String>()
         Regex("""(?:og:video(?::secure_url)?|contentUrl|embedUrl)"?\s*(?:content|=|:)\s*["']([^"']+)["']""")
             .findAll(page).map { it.groupValues[1] }.forEach { links.add(it) }

@@ -78,7 +78,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/builds/repo.json << EOF
           {
             "name": "Plugin fr",
-            "description": "Extensions CloudStream FR — 23 sources : AnimoFlix, Zenix, WaveWatch, Afterdark, FRAnime, French Stream, Flemmix, Vostfree, Anime-Sama, AnimeSite, CineStream, Purstream, 1JOUR1FILM, Streamixx, Movix (films, séries, animes, TV live FR + Madagascar + francophonie) et 7 extensions 18+ dont 3 françaises (Adkami Hentai, TrixHentai, Pornovore) VF/VOSTFR",
+            "description": "Extensions CloudStream FR — 25 sources : AnimoFlix, Zenix, WaveWatch, Afterdark, FRAnime, French Stream, Flemmix, Vostfree, Anime-Sama, AnimeSite, CineStream, Purstream, 1JOUR1FILM, Streamixx, Movix (films, séries, animes, TV live FR + Madagascar + francophonie) et 9 extensions 18+ dont 5 françaises (Adkami Hentai, TrixHentai, Pornovore, Hentai-Fap, Hentai-VOSTFR) VF/VOSTFR",
             "manifestVersion": 1,
             "pluginLists": [
               "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/builds/plugins.json"

@@ -1,5 +1,31 @@
 # Journal des mises à jour
 
+## v11.1 — 2026-09-16 (réparation serveurs + Hentai-Fap + Hentai-VOSTFR)
+
+### 🔧 StreamixxProvider v4 — « aucun serveur » réparé
+- **Nouveau format de sources lu** : l'API sert désormais `processedSources` (URL directe + flux proxysé) en plus de `downloads` — l'extension lisait l'ancien format uniquement.
+- **Passerelle instable prise en charge** : le worker répond parfois en erreur (reset/429) → l'essai cascade désormais **worker direct → proxy moviex → passerelle redécouverte → valeur par défaut**, avec 2 tentatives par endpoint.
+- **Redécouverte réparée** : le regex accepte les passerelles à sous-domaines multiples (`a-b.c.workers.dev`) et scanne tous les bundles `index-*.js` du site.
+
+### 🔧 MovixProvider v2 — « aucun serveur » réparé
+- **Cause trouvée** : le lien renommé reconstruisait un objet `ExtractorLink` dont certains champs sont nuls chez les extracteurs officiels (dood, voe, filemoon…) → exception silencieuse → 0 serveur. Le lien est désormais relayé tel quel.
+- CloudflareKiller ajouté sur toutes les requêtes (pages + embeds) ; lecture du tableau `videos` accepte `const`/`var`/`let` + fallback sur les iframes visibles si le tableau manque.
+
+### 🆕 Hentai-Fap (hentai-fap.fr) — la section streaming de hentai-paradise.fr
+- `hentai-paradise.fr` redirige sa section streaming vers `hentai-fap.fr` : c'est ce site qui est intégré (chaîne vérifiée de bout en bout : **206 MP4**).
+- **VOSTFR · VOSTA · RAW · Non censuré · VOSTES** (2 700+ vidéos, 226 pages) + recherche.
+- Lecteur craqué : jeton CSRF → `getlink.php` → **MP4 direct signé** (nginx secure_link).
+- ⚙ changement d'URL (réseau Hentai Paradise).
+
+### 🆕 Hentai-VOSTFR (hentaivost.fr)
+- Le site est derrière Cloudflare : structure vérifiée via les archives publiques, et le défi est résolu sur l'appareil par CloudflareKiller intégré.
+- **Nouveautés, Tous, Reupload + genres** (harem, famille, vanilla, ahegao, futanari…) + recherche WordPress.
+- Lecture via le lecteur du réseau Hentai Paradise (même catalogue, mêmes slugs — chaîne validée) ; ⚙ double adresse (site + lecteurs).
+
+### 📚 TUTO
+- §4.21 worker instable + formats de sources en cascade (Streamixx v4) · §4.22 NPE silencieux du constructeur ExtractorLink (Movix v2) · §4.23 réseau Hentai Paradise (csrfToken + secure_link + pont de slugs + recon Wayback sous Cloudflare).
+
+---
 ## v11 — 2026-09-16 (Streamixx v3, Movix, Adkami Hentai, HentaiStream, ⚙ URL partout)
 
 ### 🔧 StreamixxProvider v3 — « fiche introuvable » et « recherche absente » réparés
