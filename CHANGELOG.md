@@ -1,5 +1,30 @@
 # Journal des mises à jour
 
+## v10 — 2026-09-16 (Streamixx, extensions 18+, francophonie)
+
+### 🆕 StreamixxProvider v1 — films & séries MP4 directs + sous-titres
+- **18ᵉ extension** (site fourni par l'utilisateur) : streamixx.xyz, catalogue servi par une passerelle publique (films, séries, animes sous-titrés **dont français**). **MP4 directs 360/480/720p** (signés) + **sous-titres** chargés via le proxy de légendes du site.
+- Accueil : Tendances (paginé) + Sélection ; recherche complète ; séries avec toutes leurs saisons/épisodes (`seasons[].maxEp`).
+
+### 🆕 Extensions 18+ (TvType.NSFW — filtrées tant que « contenu adulte » est désactivé dans CloudStream)
+- **HentaiCity 18+** (hentaicity.com) : vidéos hentai/3D animées, **HLS directs** multi-qualités + MP4 de secours. Sections Récents / Populaires / Top notés / 3D / Anal, recherche fonctionnelle.
+- **HentaiHaven Rule34 18+** (hentaihaven.xxx) : vidéos Rule34 animées via l'API WordPress headless du site (titres + miniatures) et **manifestes HLS en clair** (octopusmanifest.org) — 1080p/720p/480p + audio. Sections Dernières / Mises à jour, recherche WP.
+- **Xvideos 18+** (xvideos.com) : vidéos amateurs & studios, **HLS directs** (480p/720p/1080p). Sections Nouveautés (paginé) / Meilleurs du mois, recherche.
+- Ces trois sources ont été vérifiées de bout en bout (liste → carte → fiche → manifeste).
+
+### 🆕 TeleFrance v3 — section 🌍 Francophonie
+- Chaînes en français **hors France** (Afrique francophone, Belgique, Canada…) depuis la playlist langue française d'iptv-org, **sans doublon** avec la liste France (déduplication par nom) : Africa 24, Africanews FR, Bénin Web TV, Congo Planet TV, Digital Congo, Ivoire Channel, TV5… s'ajoutent aux 204 chaînes existantes + Madagascar.
+
+### 📚 TUTO
+- §4.10 passerelle SPA sans auth (Streamixx) · §4.11 extensions 18+ (TvType.NSFW, 3 sources vérifiées, impasses eporner/hanime/hqporner) · §4.12 union de playlists sans doublons · §4.13 les blogs « bons plans » = listes d'APKs (haloule, Bowd auth).
+
+### 🔍 Triage des pistes fournies
+- **haloule.com** : guide d'APKs (Netflix Mirror, MovieBox, FreeCine, AnimeTV…) — rien d'intégrable côté CloudStream (apps, pas des sites).
+- **bowdtv.com** (TV+films+séries gratuit) : API derrière authentification + Turnstile → écarté.
+- Streamixx : CDN vidéo 429 sur IP datacenter (comme FireStream v9) — fonctionne depuis une IP mobile.
+
+---
+
 ## v9 — 2026-09-16 (vidsrc.buzz + hébergeurs craqués + TV Madagascar)
 
 ### 🆕 Agrégateur vidsrc.buzz — WaveWatch v7, Zenix v8, CineStream v5, UnJour1Film v6

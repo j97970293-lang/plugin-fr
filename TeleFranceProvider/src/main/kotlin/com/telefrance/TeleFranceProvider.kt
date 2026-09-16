@@ -116,21 +116,19 @@ class TeleFranceProvider : MainAPI() {
         val name: String,      // nom nettoyé (« France 24 »)
         val logo: String?,
         val groups: List<String>,
-        val url: String
+        val url: String,
+        val forcedSection: String? = null // section imposée (ex. francophonie)
     )
 
     /** Cache de la playlist (10 min). */
     private var playlistCache: Pair<Long, List<Channel>>? = null
 
-    private suspend fun channels(): List<Channel> {
-        playlistCache?.let { (ts, list) ->
-            if (System.currentTimeMillis() - ts < 600_000L && list.isNotEmpty()) return list
-        }
-        val text = runCatching {
-            app.get(currentPlaylist(), headers = baseHeaders).text
-        }.getOrNull() ?: throw ErrorLoadingException(
-            "Playlist inaccessible — vérifiez votre connexion ou changez l'adresse dans les réglages (⚙)."
-        )
+    /**
+     * Analyse une playlist M3U (entrées #EXTINF + URL). [forcedSection] impose
+     * la section de toutes les chaînes trouvées ; les noms de [exclude] sont
+     * ignorés (déduplication France ↔ francophonie).
+     */
+    private fun parsePlaylist(text: String, forcedSection: String? = null, exclude: Set<String> = emptySet()): List<Channel> {
         val out = mutableListOf<Channel>()
         var pending: Triple<String, String?, List<String>>? = null
         text.lineSequence().forEach { rawLine ->
@@ -155,9 +153,31 @@ class TeleFranceProvider : MainAPI() {
                         .replace(Regex("""\s*\((?:\d{3,4}p|SD|HD|FHD|UHD)\)"""), "")
                         .trim()
                     if (clean.isBlank()) return@forEach
-                    out += Channel(rawName, clean, logo, groups, line)
+                    if (exclude.contains(clean.lowercase())) return@forEach
+                    out += Channel(rawName, clean, logo, groups, line, forcedSection)
                 }
             }
+        }
+        return out
+    }
+
+    private suspend fun channels(): List<Channel> {
+        playlistCache?.let { (ts, list) ->
+            if (System.currentTimeMillis() - ts < 600_000L && list.isNotEmpty()) return list
+        }
+        val text = runCatching {
+            app.get(currentPlaylist(), headers = baseHeaders).text
+        }.getOrNull() ?: throw ErrorLoadingException(
+            "Playlist inaccessible — vérifiez votre connexion ou changez l'adresse dans les réglages (⚙)."
+        )
+        val out = parsePlaylist(text).toMutableList()
+        // ---- Francophonie : chaînes en français hors France (Afrique, Belgique,
+        // Canada…) depuis la playlist « langue française » d'iptv-org, sans
+        // doublon avec la liste France.
+        runCatching {
+            val fra = app.get("https://iptv-org.github.io/iptv/languages/fra.m3u", headers = baseHeaders).text
+            val known = out.map { it.name.lowercase() }.toSet()
+            out += parsePlaylist(fra, forcedSection = "franco", exclude = known)
         }
         if (out.isEmpty()) throw ErrorLoadingException(
             "Aucune chaîne trouvée dans la playlist — adresse correcte ? (⚙ pour la modifier)"
@@ -180,7 +200,7 @@ class TeleFranceProvider : MainAPI() {
     )
 
     private fun sectionFor(ch: Channel): String =
-        ch.groups.firstNotNullOfOrNull { groupKeys[it.trim()] } ?: "divers"
+        ch.forcedSection ?: ch.groups.firstNotNullOfOrNull { groupKeys[it.trim()] } ?: "divers"
 
     // -------------------------------------------------------------------------
     // Chaînes malgaches 🇲🇬 — directs YouTube résolus à la volée
@@ -255,6 +275,7 @@ class TeleFranceProvider : MainAPI() {
     // -------------------------------------------------------------------------
     override val mainPage = mainPageOf(
         "madagascar" to "🇲🇬 Madagascar",
+        "franco" to "🌍 Francophonie",
         "general" to "📺 Généralistes",
         "info" to "📰 Info & Actualité",
         "cinema" to "🎬 Cinéma",

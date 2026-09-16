@@ -1,6 +1,6 @@
 # Plugin fr · Dépôt d'extensions CloudStream
 
-**14 extensions françaises** (films, séries, animes, TV live) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
+**18 extensions** (films, séries, animes, TV live, 18+) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
 
 | Extension | Site | Contenu |
 |---|---|---|
@@ -17,7 +17,11 @@
 | **CineStreamProvider** | cinestream.info | films VF/VOSTFR — 15 lecteurs par titre |
 | **PurstreamProvider** | purstream.ad | films & séries — flux HLS directs |
 | **UnJour1FilmProvider** | 1jour1film0826b.website | films & séries VF/VOSTFR (8 400+ titres) |
-| **TeleFranceProvider** | iptv-org (GitHub) | **TV française en direct** — 200+ chaînes + **chaînes de Madagascar 🇲🇬** (TVM, RTA, RealTV…) |
+| **StreamixxProvider** | streamixx.xyz | films & séries — MP4 directs 360p/480p/720p, sous-titres FR |
+| **TeleFranceProvider** | iptv-org (GitHub) | **TV en direct** — 200+ chaînes FR, 🇲🇬 Madagascar (TVM, RTA…) & 🌍 francophonie |
+| **HentaiCityProvider** | hentaicity.com | 🔞 hentai & 3D animés — HLS directs |
+| **HentaiHavenProvider** | hentaihaven.xxx | 🔞 Rule34 animé — HLS directs |
+| **XvideosProvider** | xvideos.com | 🔞 vidéos amateurs & studios — HLS directs |
 
 ## Installation
 
@@ -29,7 +33,7 @@
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
 - repo.json : `https://x0.at/86XM.json`
-- plugins.json (liste des 14 extensions) : `https://x0.at/D0r4.json`
+- plugins.json (liste des 18 extensions) : `https://x0.at/D0r4.json`
 - WaveWatch v7 : `https://x0.at/dDfv.cs3` · Zenix v8 : `https://x0.at/tYS4.cs3` · 1JOUR1FILM v6 : `https://x0.at/jWyq.cs3` · CineStream v5 : `https://x0.at/h484.cs3` · Télé FR Direct v2 (Madagascar 🇲🇬) : `https://x0.at/MpNP.cs3` · AnimeSama v6 : `https://x0.at/i1wf.cs3` · AnimeSite v5 : `https://x0.at/ABrQ.cs3` · FrenchStream v5 : `https://x0.at/943P.cs3` · Purstream v5 : `https://x0.at/yD9r.cs3` · Vostfree v4 : `https://x0.at/Mozr.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.

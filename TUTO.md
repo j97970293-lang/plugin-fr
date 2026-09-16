@@ -649,6 +649,67 @@ depuis une vraie IP mobile avant de le déclarer mort**, et encapsuler
 dans `runCatching` + garder d'autres serveurs : l'app de l'utilisateur
 (Orange/MVola à Tana) ne voit pas le même internet que le sandbox.
 
+### 4.10 LE « TROU NOIR » DES APPLIS WEB PUBLIQUES : LA PASSERELLE SANS AUTH (Streamixx v10)
+
+Une SPA peut sembler opaque (1,3 Ko de coquille React) alors que son
+backend est **complètement ouvert** : Streamixx parle à une passerelle
+Cloudflare Worker (`…workers.dev/api/…`) qui ne vérifie aucune session.
+Méthode : analyser le bundle principal (`/assets/index-*.js`) et lister
+les routes backtick `` `/api/…` `` ; tester chaque route GET directement.
+Ici : `/api/homepage`, `/api/trending?page&perPage`, `/api/search/{q}`,
+`/api/info/{id}` (saisons = `resource.seasons[{se,maxEp}]` → générer
+1..maxEp), `/api/sources/{id}?season&episode` (MP4 directs 360/480/720
+signés) et `/api/caption?url=` (sous-titres VTT proxysés).
+⚠️ Le CDN vidéo (hakunaymatata) renvoie 429 aux IP datacenter — le flux
+marche depuis une IP résidentielle (même leçon qu'en §4.9).
+
+### 4.11 EXTENSIONS 18+ : TvType.NSFW ET LES BONNES SOURCES (v10)
+
+- CloudStream embarque `TvType.NSFW` et un réglage « contenu adulte » :
+  une extension NSFW déclare `supportedTypes = setOf(TvType.NSFW)` et
+  `tvTypes = listOf("NSFW")` dans le build.gradle.kts — elle est alors
+  filtrée tant que le réglage est désactivé. Pas de champ `containsNsfw`
+  dans le DSL gradle (vérifié dans CloudstreamExtension.class).
+- Trois sources vérifiées de bout en bout :
+  - **hentaicity.com** (PHP classique) : HLS signé
+    `hls.hentaicity.com/…master.m3u8` + MP4 de secours dans la page
+    vidéo ; recherche = `/customsearch.php?view=search&search_type=video&search={q}&main_cat=0`.
+  - **hentaihaven.xxx** : la section Rule34 expose un **WordPress
+    headless** (`cms.hentaihaven.xxx/wp-json/wp/v2/rule34-video?
+    _embed=wp:featured_media` — titres + miniatures ; ⚠️ le JSON échappe
+    les slashes, déséchapper `\/` avant regex) et le manifeste HLS **en
+    clair** dans la page vidéo (`octopusmanifest.org/{uuid}/playlist.m3u8`).
+    La section hentai `/watch/` charge son flux côté client → écartée.
+    `orderby` WP valide : date, modified, id… (pas « views »).
+  - **xvideos.com** : pages publiques sans protection ; manifeste
+    `https://hls-cdn77.xvideos-cdn.com/…/hls.m3u8` dans la config
+    html5player ; cartes avec `data-src` (vignettes lazy) et titres dans
+    `<p class="title">` ; filtrer les hrefs `THUMBNUM`.
+- Impasses testées : hanime.tv (403 CF datacenter), eporner
+  (`/xhr/video/{id}?hash=` renvoie `available:false` depuis un
+  datacenter), hqporner (liens internes introuvables côté serveur).
+
+### 4.12 FRANCOPHONIE SANS DOUBLONS : UNION DE PLAYLISTS (TeleFrance v3)
+
+Ajouter des chaînes sans répéter le catalogue : charger la playlist
+langue `iptv-org.github.io/iptv/languages/fra.m3u` (Afrique, Belgique,
+Canada…) et **exclure les noms déjà présents** dans la liste France
+(comparaison sur le nom nettoyé en minuscules), en imposant une section
+dédiée (`forcedSection`) aux nouvelles. Les playlists pays
+(`/countries/{code}.m3u`) et langue (`/languages/fra.m3u`) existent ;
+les playlists continent (`regions/afr.m3u`) n'existent pas.
+
+### 4.13 LES BLOGS « BONS PLANS STREAMING » SONT DES LISTES D'APKS (v10)
+
+La page haloule.com (films/séries/animes) ne référence **aucun site
+scrapable** : que des APKs (Netflix Mirror, MovieBox, FreeCine…),
+des raccourcisseurs (urlr.me, cuty.io) et des outils (VLC, Web Video
+Caster). Bowd (bowdtv.com, « TV + films + séries gratuit ») est une
+Expo app derrière une auth better-auth + Turnstile → 401 sur toutes
+les routes API. Avant d'investir : vérifier en 2 requêtes si l'API
+exige une session.
+
+
 
 ## 5. PIÈGES RENCONTRÉS (leçons réelles)
 
