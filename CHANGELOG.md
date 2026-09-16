@@ -1,5 +1,24 @@
 # Journal des mises à jour
 
+## v11.3 — 2026-09-16 (Movix v4, 18+ v3, agrégateur généralisé, Streamixx retiré)
+
+### 🔧 MovixProvider v4 — recherche réparée + chargement accéléré
+- **Recherche réparée** : `URLEncoder` encode les espaces en `+` (encodage de *formulaire*) alors que movix.zip attend `%20` (encodage de *chemin*) → toute recherche multi-mots renvoyait 0 résultat.
+- **Correspondance IMDb stricte** : l'API de suggestion renvoie des titres « proches » (« The Final Game of Death » → « The Death of Robin Hood ») → le titre doit correspondre après normalisation, sinon l'agrégateur est ignoré (jamais de mauvaise vidéo). La requête est envoyée sans ponctuation (« Fifty / Fifty » échoue, « fifty fifty » matche).
+- **Chargement des serveurs accéléré** : les serveurs du site sont désormais interrogés **en parallèle**, chacun borné à 15 s (vidzy.org = attente 180 s, flixeo = timeouts) ; les serveurs de l'agrégateur vidsrc.buzz sont aussi interrogés en parallèle.
+
+### 🔧 Hentai-Fap v3 & Hentai-VOSTFR v3 — sections qui ne chargent pas
+- **Cause** : la page d'accueil charge toutes les sections **en parallèle** vers le même domaine Cloudflare → rate-limit → seules les premières s'affichent. Sections réduites (Fap : 3 · Vost : 2, complémentaires) + **2e tentative automatique** après 1,5 s.
+- Lecture : referer du MP4 = fiche (chaîne validée) + une 2e tentative sur `getlink.php`.
+
+### 🆕 Supplément agrégateur généralisé (HLS multi-serveurs)
+- **Purstream v6** et **FrenchStream v6** (films, via titre → IMDb) reçoivent le supplément **vidsrc.buzz** — déjà présent dans WaveWatch, CineStream, Zenix, Afterdark, 1JOUR1FILM et Movix.
+
+### ❌ Streamixx retiré
+- Supprimé à la demande de l'utilisateur (serveurs instables malgré 4 versions) — le dépôt passe à **24 extensions**.
+
+---
+
 ## v11.2 — 2026-09-16 (Movix v3 agrégateur, Hentai-Fap v2, Hentai-VOSTFR v2)
 
 ### 🔧 MovixProvider v3 — serveurs supplémentaires garantis (séries ET films)

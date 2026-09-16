@@ -40,6 +40,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Semaphore
@@ -517,9 +518,119 @@ class FrenchStreamProvider : MainAPI() {
             }.awaitAll()
         }
 
+        // --- Supplément agrégateur vidsrc.buzz (FILMS uniquement : titre de la
+        //     fiche → id IMDb → HLS proxysés multi-serveurs) ---
+        if (filmId != null && epNum == null) {
+            runCatching {
+                val ficheHtml = app.get("$mainUrl/index.php?newsid=$filmId", headers = baseHeaders, interceptor = cfKiller).text
+                val title = Regex("""<meta property="og:title" content="([^"]*)""").find(ficheHtml)?.groupValues?.get(1)?.trim()
+                    ?: Regex("""<h1[^>]*>([^<]+)""").find(ficheHtml)?.groupValues?.get(1)?.trim()
+                if (title != null) {
+                    imdbIdFor(title)?.let { imdb ->
+                        vidsrcBuzzLinks(imdb) { l -> emit(l) }
+                    }
+                }
+            }
+        }
+
         doctorJobs.forEach { it.join() }
         doctorScope.cancel()
         return found
+    }
+
+    // -------------------------------------------------------------------------
+    // Supplément agrégateur : titre → id IMDb (sans clé) → vidsrc.buzz
+    // (FILMS UNIQUEMENT — les séries du site n'exposent pas de saison fiable)
+    // -------------------------------------------------------------------------
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class FsSuggestionEntry(val id: String? = null, val l: String? = null, val qid: String? = null)
+
+    /** Titre → id IMDb via l'API de suggestion publique, avec vérification stricte. */
+    private suspend fun imdbIdFor(title: String): String? = runCatching {
+        val q = title.trim().replace(Regex("""\s+"""), " ")
+        if (q.isEmpty()) return null
+        // l'API de suggestion IMDb préfère une requête SANS ponctuation
+        val plain = q.replace(Regex("""[^\p{L}\p{N}\s]"""), " ").replace(Regex("""\s+"""), " ").trim()
+        if (plain.isEmpty()) return null
+        val first = plain.first().lowercaseChar()
+        if (!first.isLetterOrDigit()) return null
+        val url = "https://v2.sg.media-imdb.com/suggestion/$first/" +
+            "${java.net.URLEncoder.encode(plain, "UTF-8").replace("+", "%20")}.json"
+        val body = app.get(url, headers = baseHeaders + mapOf("Accept" to "application/json")).text
+        val arr = Regex(""""d"\s*:\s*(\[.*\])\s*,\s*"q"""").find(body)?.groupValues?.get(1) ?: return null
+        val entries = runCatching { mapper.readValue(arr, Array<FsSuggestionEntry>::class.java) }.getOrNull() ?: return null
+        val tt = entries.filter { it.id?.startsWith("tt") == true }
+        // ⚠ vérification stricte du titre : l'API renvoie des titres « proches »,
+        // ne jamais servir l'agrégateur sur un autre contenu.
+        tt.firstOrNull { it.qid == "movie" && fsTitlesMatch(it.l ?: "", plain) }?.id
+            ?: tt.firstOrNull { fsTitlesMatch(it.l ?: "", plain) }?.id
+    }.getOrNull()
+
+    private fun fsTitlesMatch(a: String, b: String): Boolean {
+        fun norm(x: String) = x.lowercase()
+            .replace(Regex("""[^\p{L}\p{N}\s]"""), " ")
+            .replace(Regex("""\s+"""), " ").trim()
+        val (na, nb) = norm(a) to norm(b)
+        if (na.length < 2 || nb.length < 2) return false
+        return na == nb || na.contains(nb) || nb.contains(na)
+    }
+
+    /** vidsrc.buzz — HLS proxysés directs multi-serveurs (films). */
+    private suspend fun vidsrcBuzzLinks(imdbId: String, callback: (ExtractorLink) -> Unit): Boolean {
+        val embedUrl = "https://vidsrc.buzz/embed/movie/$imdbId"
+        val vsHeaders = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Accept" to "application/json",
+            "Referer" to embedUrl
+        )
+        val html = runCatching { app.get(embedUrl, headers = vsHeaders).text }.getOrNull() ?: return false
+        val qm = Regex("""var Q = (\{.*?\});""", RegexOption.DOT_MATCHES_ALL).find(html) ?: return false
+        val q = runCatching { mapper.readTree(qm.groupValues[1]) }.getOrNull() ?: return false
+        val id = q.path("id").asText()
+        val token = q.path("t").asText()
+        if (id.isBlank() || token.isBlank()) return false
+        val qs = "type=movie&id=${java.net.URLEncoder.encode(id, "UTF-8")}" +
+            "&s=${q.path("s").asInt()}&e=${q.path("e").asInt()}&t=${java.net.URLEncoder.encode(token, "UTF-8")}"
+        val srcJson = runCatching {
+            app.get("https://vidsrc.buzz/pl/api.php?a=sources&$qs", headers = vsHeaders).text
+        }.getOrNull() ?: return false
+        val servers = runCatching { mapper.readTree(srcJson).path("servers") }.getOrNull() ?: return false
+        if (!servers.isArray || servers.size() == 0) return false
+        val foundFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        coroutineScope {
+            servers.take(4).forEach { sv ->
+                launch(Dispatchers.IO) {
+                    val ref = sv.path("ref").asText(null)?.takeIf { it.isNotBlank() } ?: return@launch
+                    val svName = sv.path("name").asText("Serveur").replace(Regex("""^Server\s+"""), "").trim()
+                        .takeIf { it.isNotBlank() } ?: "Agrégateur"
+                    var u: String? = null
+                    for (attempt in 1..2) {
+                        val play = runCatching {
+                            app.get(
+                                "https://vidsrc.buzz/pl/api.php?a=play&ref=${java.net.URLEncoder.encode(ref, "UTF-8")}" +
+                                    "&t=${java.net.URLEncoder.encode(token, "UTF-8")}",
+                                headers = vsHeaders
+                            ).text
+                        }.getOrNull() ?: break
+                        u = runCatching { mapper.readTree(play).path("url").asText(null) }.getOrNull()
+                        if (!u.isNullOrBlank()) break
+                        if (attempt == 1) delay(1200)
+                    }
+                    val raw = u?.takeIf { it.isNotBlank() } ?: return@launch
+                    val link = if (raw.startsWith("/")) "https://vidsrc.buzz$raw" else raw
+                    if (!link.startsWith("http")) return@launch
+                    foundFlag.set(true)
+                    callback(
+                        newExtractorLink("VidSrc $svName", "VidSrc $svName", link) {
+                            this.referer = "https://vidsrc.buzz/"
+                            this.quality = Qualities.Unknown.value
+                            this.type = ExtractorLinkType.M3U8
+                        }
+                    )
+                }
+            }
+        }
+        return foundFlag.get()
     }
 
     /** Nom lisible du lecteur. */

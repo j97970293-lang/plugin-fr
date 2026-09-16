@@ -130,9 +130,9 @@ class HentaiVostProvider : MainAPI() {
 
     // Sections servies par le pont hentai-fap.fr (réseau identique, pas de
     // défi Cloudflare) — plus aucun appel hentaivost.fr dans le catalogue.
+    // 2 sections complémentaires de Hentai-Fap (VOSTFR/non censuré y sont
+    // déjà) : moins de requêtes parallèles vers le même domaine Cloudflare.
     override val mainPage = mainPageOf(
-        "cat:hentai-sous-titre-francais-vostfr" to "🆕 Nouveautés VOSTFR",
-        "cat:hentai-non-censure" to "🔓 Non censuré",
         "tag:harem" to "🎀 Harem",
         "tag:inceste" to "👪 Inceste"
     )
@@ -182,9 +182,17 @@ class HentaiVostProvider : MainAPI() {
             request.data.startsWith("tag:") -> "$bridge/tags-video/${request.data.removePrefix("tag:")}/$page"
             else -> "$bridge/hentai-streaming/hentai-sous-titre-francais-vostfr/$page"
         }
-        val html = httpGet(url, referer = "$bridge/")
-            ?: return newHomePageResponse(request, emptyList(), false)
-        val items = parseCards(html, bridge)
+        var items: List<SearchResponse> = emptyList()
+        // 2 tentatives : les requêtes parallèles de la page d'accueil peuvent
+        // être rate-limitées (403 Cloudflare) — la 2e passe 1,5 s plus tard.
+        for (attempt in 1..2) {
+            val html = httpGet(url, referer = "$bridge/")
+            if (html != null) {
+                items = parseCards(html, bridge)
+                if (items.isNotEmpty()) break
+            }
+            if (attempt == 1) kotlinx.coroutines.delay(1500)
+        }
         return newHomePageResponse(request, items, hasNext = items.size >= 12)
     }
 
@@ -269,15 +277,20 @@ class HentaiVostProvider : MainAPI() {
             put("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             if (token != null) put("X-CSRF-Token", token)
         }
-        val signed = runCatching {
-            app.post(
-                "$base/ajax/getlink.php",
-                headers = postHeaders,
-                data = mapOf("file" to path),
-                interceptor = cfKiller
-            ).text.trim()
-        }.getOrNull() ?: return null
-        if (signed.startsWith("{") || !signed.startsWith("/")) return null
+        var signed: String? = null
+        for (attempt in 1..2) {
+            signed = runCatching {
+                app.post(
+                    "$base/ajax/getlink.php",
+                    headers = postHeaders,
+                    data = mapOf("file" to path),
+                    interceptor = cfKiller
+                ).text.trim()
+            }.getOrNull()
+            if (!signed.isNullOrEmpty() && signed.startsWith("/")) break
+            if (attempt == 1) kotlinx.coroutines.delay(1200)
+        }
+        if (signed == null || signed.startsWith("{") || !signed.startsWith("/")) return null
         return "${ep.server}$signed"
     }
 
@@ -297,7 +310,7 @@ class HentaiVostProvider : MainAPI() {
                 val link = fapSignedLink(bridge, ep, data) ?: return@let
                 callback(
                     ExtractorLink(
-                        name, name, link, "$bridge/",
+                        name, name, link, data,
                         quality = Qualities.Unknown.value,
                         type = ExtractorLinkType.VIDEO
                     )
@@ -324,7 +337,7 @@ class HentaiVostProvider : MainAPI() {
                 val link = fapSignedLink(bridge, ep, "$mainUrl/$slug/") ?: return@let
                 callback(
                     ExtractorLink(
-                        name, name, link, "$mainUrl/",
+                        name, name, link, "$mainUrl/$slug/",
                         quality = Qualities.Unknown.value,
                         type = ExtractorLinkType.VIDEO
                     )
@@ -339,7 +352,7 @@ class HentaiVostProvider : MainAPI() {
         val link = fapSignedLink(bridge, ep, "$bridge/hentai-video/$slug") ?: return false
         callback(
             ExtractorLink(
-                name, name, link, "$bridge/",
+                name, name, link, data,
                 quality = Qualities.Unknown.value,
                 type = ExtractorLinkType.VIDEO
             )

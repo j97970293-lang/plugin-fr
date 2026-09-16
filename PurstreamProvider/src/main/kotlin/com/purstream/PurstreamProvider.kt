@@ -25,7 +25,10 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.Qualities
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -463,9 +466,86 @@ class PurstreamProvider : MainAPI() {
                 }.awaitAll()
             }
             produced += producedExtra.get()
+
+            // vidsrc.buzz : HLS proxysés directs multi-serveurs
+            runCatching {
+                if (vidsrcBuzzLinks(tmdb!!, season, episode) { l -> produced++; callback(l) }) produced++
+            }
         }
 
         return produced > 0
+    }
+
+    /**
+     * vidsrc.buzz — agrégateur TMDB multi-serveurs. HLS proxysés directs :
+     * /embed/{type}/{tmdb}[/s/e] → `var Q = {…}` → /pl/api.php?a=sources →
+     * a=play (en parallèle) → {url:"/_stream?id=…"}.
+     */
+    private suspend fun vidsrcBuzzLinks(
+        tmdbId: String,
+        season: Int?,
+        episode: Int?,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val embedUrl = if (season != null && episode != null) {
+            "https://vidsrc.buzz/embed/tv/$tmdbId/$season/$episode"
+        } else {
+            "https://vidsrc.buzz/embed/movie/$tmdbId"
+        }
+        val vsHeaders = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Accept" to "application/json",
+            "Referer" to embedUrl
+        )
+        val html = runCatching { app.get(embedUrl, headers = vsHeaders).text }.getOrNull() ?: return false
+        val qm = Regex("""var Q = (\{.*?\});""", RegexOption.DOT_MATCHES_ALL).find(html) ?: return false
+        val q = runCatching { mapper.readTree(qm.groupValues[1]) }.getOrNull() ?: return false
+        val id = q.path("id").asText()
+        val token = q.path("t").asText()
+        if (id.isBlank() || token.isBlank()) return false
+        val qs = "type=${q.path("type").asText("movie")}&id=${java.net.URLEncoder.encode(id, "UTF-8")}" +
+            "&s=${q.path("s").asInt()}&e=${q.path("e").asInt()}&t=${java.net.URLEncoder.encode(token, "UTF-8")}"
+        val srcJson = runCatching {
+            app.get("https://vidsrc.buzz/pl/api.php?a=sources&$qs", headers = vsHeaders).text
+        }.getOrNull() ?: return false
+        val servers = runCatching { mapper.readTree(srcJson).path("servers") }.getOrNull() ?: return false
+        if (!servers.isArray || servers.size() == 0) return false
+        // serveurs interrogés EN PARALLÈLE (certains renvoient 502)
+        val foundFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        coroutineScope {
+            servers.take(4).forEach { sv ->
+                launch(Dispatchers.IO) {
+                    val ref = sv.path("ref").asText(null)?.takeIf { it.isNotBlank() } ?: return@launch
+                    val svName = sv.path("name").asText("Serveur").replace(Regex("""^Server\s+"""), "").trim()
+                        .takeIf { it.isNotBlank() } ?: "Agrégateur"
+                    var u: String? = null
+                    for (attempt in 1..2) {
+                        val play = runCatching {
+                            app.get(
+                                "https://vidsrc.buzz/pl/api.php?a=play&ref=${java.net.URLEncoder.encode(ref, "UTF-8")}" +
+                                    "&t=${java.net.URLEncoder.encode(token, "UTF-8")}",
+                                headers = vsHeaders
+                            ).text
+                        }.getOrNull() ?: break
+                        u = runCatching { mapper.readTree(play).path("url").asText(null) }.getOrNull()
+                        if (!u.isNullOrBlank()) break
+                        if (attempt == 1) delay(1200)
+                    }
+                    val raw = u?.takeIf { it.isNotBlank() } ?: return@launch
+                    val link = if (raw.startsWith("/")) "https://vidsrc.buzz$raw" else raw
+                    if (!link.startsWith("http")) return@launch
+                    foundFlag.set(true)
+                    callback(
+                        newExtractorLink("VidSrc $svName", "VidSrc $svName", link) {
+                            this.referer = "https://vidsrc.buzz/"
+                            this.quality = Qualities.Unknown.value
+                            this.type = ExtractorLinkType.M3U8
+                        }
+                    )
+                }
+            }
+        }
+        return foundFlag.get()
     }
 
     // -------------------------------------------------------------------------

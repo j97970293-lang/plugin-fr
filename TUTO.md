@@ -1009,3 +1009,26 @@ archivées, `web.archive.org/web/2026/https://…`), structure = cartes Cactus
    section = une requête qui peut attendre le défi).
 
 
+### 4.25 ENCODAGE DE CHEMIN vs FORMULAIRE + MATCHING IMDB STRICT + PARALLÈLE BORNÉ (v11.3)
+
+1. **`URLEncoder.encode` produit `+` pour les espaces** (encodage de formulaire). Dans un
+   *chemin* d'URL (`/search/{q}`), beaucoup de sites attendent `%20` — une recherche
+   multi-mots peut renvoyer 0 résultat sans aucune erreur visible. → Toujours
+   `.replace("+", "%20")` après `URLEncoder` quand la requête va dans un chemin.
+2. **L'API de suggestion IMDb (`v2.sg.media-imdb.com/suggestion/…`) est floue ET littérale** :
+   - elle renvoie des titres « proches » classés par popularité (« The Final Game of Death »
+     → « The Death of Robin Hood » en premier) → **vérifiez le titre** après normalisation
+     (casse/ponctuation/accents) avant d'utiliser l'id, sous peine de servir un autre contenu ;
+   - elle matche mal la ponctuation de la requête (« Fifty / Fifty » échoue, « fifty fifty »
+     matche) → envoyez la requête **sans ponctuation**.
+3. **Un hôte mort ne doit jamais bloquer toute la liste** : vidzy.org affiche une attente de
+   180 s, flixeo timeout — interrogez les serveurs **en parallèle** (`coroutineScope` +
+   `launch(Dispatchers.IO)`) et bornez chaque serveur (`withTimeoutOrNull(15_000)`).
+   Les `AtomicBoolean` remplacent les `var found` partagés entre coroutines.
+4. **La page d'accueil CloudStream charge toutes les sections en parallèle** : N sections =
+   N requêtes simultanées vers le même domaine — les sites Cloudflare rate-limitent au-delà
+   de quelques-unes et seules les premières sections s'affichent. → Réduisez le nombre de
+   sections et **retentez une fois** après un délai (la 2e passe arrive quand le rate-limit
+   transitoire est passé).
+
+

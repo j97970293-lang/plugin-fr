@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 5
+version = 6
 
 cloudstream {
     description = "French Stream — Films & séries VF/VOSTFR (multi-lecteurs : Uqload, Vidzy, FileMoon, Dood, Voe…)"

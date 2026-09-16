@@ -117,12 +117,13 @@ class HentaiFapProvider : MainAPI() {
         app.get(url, headers = headers(referer), interceptor = cfKiller).text
     }.getOrNull()
 
+    // 3 sections seulement : la page d'accueil charge toutes les sections en
+    // parallèle et hentai-fap.fr (Cloudflare) rate-limite au-delà — les
+    // sections RAW/VOSTES restent accessibles via la recherche.
     override val mainPage = mainPageOf(
         "hentai-sous-titre-francais-vostfr" to "🇫🇷 VOSTFR",
-        "hentai-sous-titre-anglais-vosta" to "🇬🇧 VOSTA",
-        "hentai-version-originale-raw" to "🇯🇵 RAW",
         "hentai-non-censure" to "🔓 Non censuré",
-        "hentai-sous-titre-espagnol-vostes" to "🇪🇸 VOSTES"
+        "hentai-sous-titre-anglais-vosta" to "🇬🇧 VOSTA"
     )
 
     // -------------------------------------------------------------------------
@@ -151,9 +152,17 @@ class HentaiFapProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
-        val html = httpGet("$mainUrl/hentai-streaming/${request.data}/$page")
-            ?: return newHomePageResponse(request, emptyList(), false)
-        val items = parseCards(html)
+        var items: List<SearchResponse> = emptyList()
+        // 2 tentatives : les requêtes parallèles de la page d'accueil peuvent
+        // être rate-limitées (403 Cloudflare) — la 2e passe 1,5 s plus tard.
+        for (attempt in 1..2) {
+            val html = httpGet("$mainUrl/hentai-streaming/${request.data}/$page")
+            if (html != null) {
+                items = parseCards(html)
+                if (items.isNotEmpty()) break
+            }
+            if (attempt == 1) kotlinx.coroutines.delay(1500)
+        }
         return newHomePageResponse(request, items, hasNext = items.size >= 12)
     }
 
@@ -231,21 +240,26 @@ class HentaiFapProvider : MainAPI() {
             put("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             if (token != null) put("X-CSRF-Token", token)
         }
-        val signed = runCatching {
-            app.post(
-                "$mainUrl/ajax/getlink.php",
-                headers = postHeaders,
-                data = mapOf("file" to path),
-                interceptor = cfKiller
-            ).text.trim()
-        }.getOrNull() ?: return false
-        if (signed.startsWith("{") || !signed.startsWith("/")) return false
+        var signed: String? = null
+        for (attempt in 1..2) {
+            signed = runCatching {
+                app.post(
+                    "$mainUrl/ajax/getlink.php",
+                    headers = postHeaders,
+                    data = mapOf("file" to path),
+                    interceptor = cfKiller
+                ).text.trim()
+            }.getOrNull()
+            if (!signed.isNullOrEmpty() && signed.startsWith("/")) break
+            if (attempt == 1) kotlinx.coroutines.delay(1200)
+        }
+        if (signed == null || signed.startsWith("{") || !signed.startsWith("/")) return false
 
         val link = "$server$signed"
         if (!link.startsWith("http")) return false
         callback(
             ExtractorLink(
-                name, name, link, "$mainUrl/",
+                name, name, link, data,
                 quality = Qualities.Unknown.value,
                 type = ExtractorLinkType.VIDEO
             )
