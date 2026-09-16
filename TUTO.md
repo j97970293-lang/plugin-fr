@@ -971,3 +971,41 @@ l'autre (`hentai-fap.fr/hentai-video/{slug}`). Pour la recon d'un site
  derrière Cloudflare sans navigateur : **Wayback** (homepage + listes
 archivées, `web.archive.org/web/2026/https://…`), structure = cartes Cactus
 `<div class="picture-content">` + recherche WP `/?s=`.
+### 4.24 QUAND LES SOURCES DU SITE SONT MURÉES : DIAGNOSTIQUER PUIS COMPLÉTER (Movix v3 + Hentai-Fap v2 + Hentai-VOSTFR v2)
+
+**Symptômes apparemment identiques, causes radicalement différentes.**
+
+1. **Movix « 0 serveur » alors que la page contient `const videos`** : les 4 serveurs de GoT
+   S1E1 étaient réels mais *murés individuellement* —
+   - `vidzy.org` : page « Chargement vidéo » avec un **compte à rebours de 180 s** puis
+     `location.reload()` (anti-bot *pour tout le monde*, pas seulement les datacenters).
+     → détection (`"Chargement vidéo" in page && "location.reload" in page`) et abandon
+     immédiat : ne faites jamais attendre l'utilisateur 3 minutes.
+   - `uqload.net` : 403 depuis certaines IP (anti-bot datacenter) — sur IP mobile ça peut
+     marcher via l'extracteur officiel, on laisse `loadExtractor` essayer.
+   - `multiup.us/e/…` : multi-hébergeurs de *téléchargement* (uptobox…), pas de flux
+     vidéo → ignoré.
+   - `flixeo.xyz` : instable (timeouts) → extraction générique best-effort.
+2. **Le correctif qui donne des serveurs *garantis* : un agrégateur en supplément.**
+   - Titre → id **IMDb sans clé** : `https://v2.sg.media-imdb.com/suggestion/{1re
+     lettre}/{requête}.json` → premier résultat `tt…` avec `qid` du bon type
+     (`tvSeries`/`movie`). Le slug URL (remplacer `-` par espace) suffit comme requête.
+   - **vidsrc.buzz accepte les ids IMDb directement** :
+     `/embed/tv/tt0944947/1/1` ≡ `/embed/tv/1399/1/1` — pas besoin de convertir vers TMDB.
+   - Chaîne : page embed → `var Q = {type,id,s,e,t}` → `GET /pl/api.php?a=sources&…` →
+     serveurs `[{ref,name}]` → `GET /pl/api.php?a=play&ref&t` → `{url:"/_stream?id=…"}`
+     = **HLS proxysé direct** (`#EXTM3U` vérifié).
+   - Les `a=play` renvoient parfois **502** (limite de débit) → 1 retry avec délai,
+     et tolérez qu'une partie des serveurs échoue (2-3 sur 4 suffisent).
+3. **Hentai-Fap catalogue vide alors que curl voit les cartes** : le HTML réel contient des
+   **sauts de ligne entre les attributs** (`class='vignFloatH tl'\n   href=…`). Une regex
+   `class='…' href='…'` (une seule espace) matche en local sur une variante mise en cache
+   puis ne matche plus sur l'appareil. → **Toujours `[\s\S]{0,N}?` entre les attributs**,
+   jamais `' '` littéral.
+4. **Hentai-VOSTFR timeout** : quand le site principal est derrière un défi Cloudflare
+   insoluble même par CloudflareKiller, **basculez le moteur** : même réseau → même
+   catalogue → mêmes slugs → catalogue/recherche/fiches/lecture servis par le pont,
+   le site muré n'est plus qu'un secours. Réduisez aussi le nombre de sections (chaque
+   section = une requête qui peut attendre le défi).
+
+

@@ -1,8 +1,8 @@
 // Use an integer for version numbers
-version = 2
+version = 3
 
 cloudstream {
-    description = "Movix — films et séries VF/VOSTFR (serveurs multiples, versions TRUEFRENCH/VF/VOSTFR)"
+    description = "Movix — films & séries VF/VOSTFR (serveurs du site + supplément agrégateur multi-serveurs)"
     authors = listOf("j97970293-lang")
     status = 1
     tvTypes = listOf("Movie", "TvSeries")

@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 1
+version = 2
 
 cloudstream {
     description = "Hentai-Fap — hentai VOSTFR/VOSTA/RAW/non censuré, MP4 directs (réseau Hentai Paradise)"

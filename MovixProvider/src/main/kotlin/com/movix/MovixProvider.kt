@@ -27,6 +27,7 @@ import com.lagradost.cloudstream3.utils.JsUnpacker
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import kotlinx.coroutines.delay
 
 // ===========================================================================
 // Movix — films & séries VF/VOSTFR (vidzy, kakaflix/dood, voe…)
@@ -45,6 +46,11 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 //   Extraction: embeds vidzy.cc/.live (sources videojs XOR base64(hostname)),
 //               kakaflix.lol (dood/voe) → fallback générique (regex sources
 //               + p.a.c.k.e.r + XOR).
+//   v3 : les serveurs propres au site sont parfois murés (vidzy.org = page
+//   d'attente 180 s, uqload.net = 403, multiup = hébergeurs de télécharge-
+//   ment, flixeo = instable) → SUPPLÉMENT agrégateur vidsrc.buzz : titre →
+//   id IMDb (API suggestion IMDb, sans clé) → /embed/{type}/{imdb}[/s/e]
+//   → var Q → /pl/api.php?a=sources → a=play → HLS proxysés multi-serveurs.
 // ===========================================================================
 @CloudstreamPlugin
 class MovixPlugin : Plugin() {
@@ -279,6 +285,108 @@ class MovixProvider : MainAPI() {
         val type: String? = null
     )
 
+    // -------------------------------------------------------------------------
+    // Supplément agrégateur : IMDb suggestion (sans clé) → vidsrc.buzz
+    // (chaîne validée : embed → var Q → a=sources → a=play → HLS proxy)
+    // -------------------------------------------------------------------------
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class SuggestionEntry(val id: String? = null, val l: String? = null, val qid: String? = null, val y: Int? = null)
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class VsQ(val type: String? = null, val id: String? = null, val s: Int? = null, val e: Int? = null, val t: String? = null)
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class VsServer(val ref: String? = null, val name: String? = null)
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class VsPlay(val url: String? = null)
+
+    /** Titre (slug) → id IMDb via l'API de suggestion publique (sans clé). */
+    private suspend fun imdbIdFor(query: String, isTv: Boolean): String? = runCatching {
+        val q = query.trim().replace(Regex("""\s+"""), " ")
+        if (q.isEmpty()) return null
+        val first = q.first().lowercaseChar()
+        if (!first.isLetterOrDigit()) return null
+        val url = "https://v2.sg.media-imdb.com/suggestion/$first/${java.net.URLEncoder.encode(q, "UTF-8")}.json"
+        val body = app.get(url, headers = mapOf("User-Agent" to USER_AGENT, "Accept" to "application/json")).text
+        val arr = Regex(""""d"\s*:\s*(\[.*\])\s*,\s*"q"""").find(body)?.groupValues?.get(1) ?: return null
+        val entries = AppUtils.parseJson<List<SuggestionEntry>>(arr)
+        val ttEntries = entries.filter { it.id?.startsWith("tt") == true }
+        if (ttEntries.isEmpty()) return null
+        val wanted = if (isTv) setOf("tvSeries", "tvMiniSeries") else setOf("movie")
+        (ttEntries.firstOrNull { it.qid in wanted } ?: ttEntries.first()).id
+    }.getOrNull()
+
+    /** vidsrc.buzz — HLS proxysés multi-serveurs (films, séries, animes). */
+    private suspend fun vidsrcBuzzLinks(
+        imdbId: String,
+        isTv: Boolean,
+        season: Int?,
+        episode: Int?,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val embedUrl = if (isTv && season != null && episode != null) {
+            "https://vidsrc.buzz/embed/tv/$imdbId/$season/$episode"
+        } else if (isTv) {
+            "https://vidsrc.buzz/embed/tv/$imdbId/1/1"
+        } else {
+            "https://vidsrc.buzz/embed/movie/$imdbId"
+        }
+        val html = runCatching { app.get(embedUrl, headers = mapOf("User-Agent" to USER_AGENT)).text }.getOrNull()
+            ?: return false
+        val qm = Regex("""var Q = (\{.*?\});""", RegexOption.DOT_MATCHES_ALL).find(html) ?: return false
+        val q = runCatching { AppUtils.parseJson<VsQ>(qm.groupValues[1]) }.getOrNull() ?: return false
+        val id = q.id?.takeIf { it.isNotBlank() } ?: return false
+        val token = q.t?.takeIf { it.isNotBlank() } ?: return false
+        val qs = "type=${q.type ?: "movie"}&id=${java.net.URLEncoder.encode(id, "UTF-8")}" +
+            "&s=${q.s ?: 0}&e=${q.e ?: 0}&t=${java.net.URLEncoder.encode(token, "UTF-8")}"
+        val srcJson = runCatching {
+            app.get(
+                "https://vidsrc.buzz/pl/api.php?a=sources&$qs",
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to embedUrl,
+                    "Accept" to "application/json"
+                )
+            ).text
+        }.getOrNull() ?: return false
+        val servers = runCatching { AppUtils.parseJson<List<VsServer>>(srcJson) }.getOrNull() ?: return false
+        var found = false
+        servers.take(4).forEach { sv ->
+            val ref = sv.ref?.takeIf { it.isNotBlank() } ?: return@forEach
+            val svName = sv.name?.replace(Regex("""^Server\s+"""), "")?.trim().takeIf { !it.isNullOrBlank() } ?: "Agrégateur"
+            var u: String? = null
+            for (attempt in 1..2) {
+                val play = runCatching {
+                    app.get(
+                        "https://vidsrc.buzz/pl/api.php?a=play&ref=${java.net.URLEncoder.encode(ref, "UTF-8")}" +
+                            "&t=${java.net.URLEncoder.encode(token, "UTF-8")}",
+                        headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to embedUrl,
+                            "Accept" to "application/json"
+                        )
+                    ).text
+                }.getOrNull() ?: break
+                u = runCatching { AppUtils.parseJson<VsPlay>(play).url }.getOrNull()
+                if (!u.isNullOrBlank()) break
+                if (attempt == 1) delay(1500)
+            }
+            val raw = u?.takeIf { it.isNotBlank() } ?: return@forEach
+            val link = if (raw.startsWith("/")) "https://vidsrc.buzz$raw" else raw
+            if (!link.startsWith("http")) return@forEach
+            found = true
+            callback(
+                newExtractorLink("VidSrc $svName", "VidSrc $svName", link) {
+                    this.referer = "https://vidsrc.buzz/"
+                    this.quality = Qualities.Unknown.value
+                    this.type = ExtractorLinkType.M3U8
+                }
+            )
+        }
+        return found
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -289,6 +397,22 @@ class MovixProvider : MainAPI() {
         val html = runCatching {
             app.get(data, headers = headers(), interceptor = cfKiller).text
         }.getOrNull() ?: return false
+
+        // slug + type + épisode, pour le supplément agrégateur vidsrc.buzz
+        val path = data.substringAfter("://", "").substringAfter('/', "").trim('/')
+        val parts = path.split("/")
+        val isTvEpisode = parts.firstOrNull() == "episode"
+        val isTvShow = parts.firstOrNull() == "tv-show" || isTvEpisode
+        val slug = parts.getOrNull(1)?.takeIf { it.isNotBlank() && it != "episode" }
+        val se = parts.getOrNull(2)?.split("-")
+        val season = se?.getOrNull(0)?.toIntOrNull()
+        val episode = se?.getOrNull(1)?.toIntOrNull()
+        suspend fun tryAggregator(): Boolean {
+            val sl = slug ?: return false
+            val imdb = imdbIdFor(sl.replace('-', ' '), isTvShow) ?: return false
+            return runCatching { vidsrcBuzzLinks(imdb, isTvShow, season, episode, callback) }.getOrDefault(false)
+        }
+
         val videosJson = Regex("""(?:const|var|let)\s+videos\s*=\s*(\[[\s\S]*?\]);""").find(html)?.groupValues?.get(1)
         val videos = videosJson?.let { runCatching { AppUtils.parseJson<List<MvVideo>>(it) }.getOrNull() }
         var found = false
@@ -306,7 +430,7 @@ class MovixProvider : MainAPI() {
             }
             if (found) return true
         }
-        if (videos.isNullOrEmpty()) return false
+        if (videos.isNullOrEmpty()) return tryAggregator()
         videos.forEach { v ->
             val link = v.link?.takeIf { it.startsWith("http") } ?: return@forEach
             val version = v.version?.takeIf { it.isNotBlank() } ?: ""
@@ -328,7 +452,9 @@ class MovixProvider : MainAPI() {
                 if (genericExtract(link, label, subtitleCallback, callback)) found = true
             }
         }
-        return found
+        // ---- Supplément agrégateur vidsrc.buzz (HLS multi-serveurs) ----
+        val aggFound = tryAggregator()
+        return found || aggFound
     }
 
     // -------------------------------------------------------------------------
@@ -347,6 +473,8 @@ class MovixProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean = runCatching {
         val page = app.get(embedUrl, referer = mainUrl, headers = mapOf("user-agent" to USER_AGENT), interceptor = cfKiller).text
+        // page d'attente anti-bot vidzy.org (compte à rebours 180 s) : aucun flux
+        if ("Chargement vidéo" in page && "location.reload" in page) return@runCatching false
         val links = LinkedHashSet<String>()
         Regex("""(?:og:video(?::secure_url)?|contentUrl|embedUrl)"?\s*(?:content|=|:)\s*["']([^"']+)["']""")
             .findAll(page).map { it.groupValues[1] }.forEach { links.add(it) }

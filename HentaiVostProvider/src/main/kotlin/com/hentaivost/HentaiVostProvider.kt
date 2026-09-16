@@ -24,22 +24,16 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 
 // ===========================================================================
-// Hentai-VOSTFR — hentai VOSTFR (WordPress Cactus, protégé Cloudflare)
+// Hentai-VOSTFR — hentai VOSTFR (réseau Hentai Paradise)
 // ===========================================================================
 // Site : https://hentaivost.fr (réseau Hentai Paradise ; même catalogue que
 // hentai-fap.fr — les slugs vidéos sont identiques).
-//   ⚠ Cloudflare « Just a moment » sur IP datacenter : structure vérifiée
-//   via les instantanés Wayback ; sur l'appareil, CloudflareKiller règle
-//   le défi dans la WebView.
-//   Listes    : /hp/hentai-video/ (+ /news/, /reupload/, ?genre={tag})
-//               pagination /page/N/ — cartes : <div class="picture-content">
-//               → <a href=/{slug}/ title=TITRE> + <img src=…>
-//   Recherche : /?s={q} (WordPress standard, mêmes cartes)
-//   Fiche     : /{slug}/ → og:title / og:image / og:description
-//   Lecture   : la page vidéo porte le lecteur du réseau ; si celui-ci
-//   n'est pas lisible, on emprunte le chemin VALIDÉ du même catalogue sur
-//   hentai-fap.fr : /hentai-video/{slug} → div#stream_ep (data-v, data-f)
-//   → /ajax/csrfToken.php → /ajax/getlink.php → MP4 signé.
+//   ⚠ v2 : hentaivost.fr reste derrière un défi Cloudflare que même
+//   CloudflareKiller ne résout pas sur certains appareils → l'extension
+//   s'appuie désormais directement sur le PONT hentai-fap.fr (réseau
+//   identique, slugs identiques, lecteurs identiques) pour le catalogue,
+//   la recherche, les fiches et la lecture. hentaivost.fr n'est essayé
+//   qu'en secours pour la fiche et le lecteur si le pont échoue.
 // ===========================================================================
 @CloudstreamPlugin
 class HentaiVostPlugin : Plugin() {
@@ -89,7 +83,7 @@ class HentaiVostProvider : MainAPI() {
                 setText(currentUrl()); hint = "https://hentaivost.fr"
             }
             val inputBridge = android.widget.EditText(context).apply {
-                setText(currentBridge()); hint = "https://hentai-fap.fr (lecteurs)"
+                setText(currentBridge()); hint = "https://hentai-fap.fr (moteur du catalogue)"
             }
             val pad = (context.resources.displayMetrics.density * 20).toInt()
             val layout = android.widget.LinearLayout(context).apply {
@@ -100,7 +94,10 @@ class HentaiVostProvider : MainAPI() {
             }
             android.app.AlertDialog.Builder(context)
                 .setTitle("Adresse de Hentai-VOSTFR")
-                .setMessage("Si le site change de domaine, indiquez l'adresse actuelle. Le second champ est le site qui sert les lecteurs (réseau Hentai Paradise).")
+                .setMessage(
+                    "Le catalogue et les lecteurs sont servis par le second champ (réseau Hentai " +
+                        "Paradise, sans défi Cloudflare). Le premier champ n'est utilisé qu'en secours."
+                )
                 .setView(layout)
                 .setPositiveButton("Enregistrer") { _, _ -> setUrls(context, inputSite.text.toString(), inputBridge.text.toString()) }
                 .setNegativeButton("Annuler", null)
@@ -131,30 +128,46 @@ class HentaiVostProvider : MainAPI() {
         app.get(url, headers = headers(referer), interceptor = cfKiller).text
     }.getOrNull()
 
+    // Sections servies par le pont hentai-fap.fr (réseau identique, pas de
+    // défi Cloudflare) — plus aucun appel hentaivost.fr dans le catalogue.
     override val mainPage = mainPageOf(
-        "news" to "🆕 Nouveautés",
-        "" to "🔥 Tous les hentai",
-        "reupload" to "🔁 Reupload",
-        "harem" to "🎀 Harem",
-        "incest" to "👪 Famille",
-        "vanilla" to "💌 Vanilla",
-        "ahegao" to "😵 Ahegao",
-        "futanari" to "🍑 Futanari"
+        "cat:hentai-sous-titre-francais-vostfr" to "🆕 Nouveautés VOSTFR",
+        "cat:hentai-non-censure" to "🔓 Non censuré",
+        "tag:harem" to "🎀 Harem",
+        "tag:inceste" to "👪 Inceste"
     )
 
     // -------------------------------------------------------------------------
-    // Cartes Cactus : <div class="picture-content"> → <a href=/{slug}/
-    // title=TITRE> … <img src=…> (les articles de blog n'ont pas ce bloc)
+    // Cartes du pont (hentai-fap.fr) : <a id="thumbs-…"
+    //   class='vignFloatH tl'
+    //   href='…/hentai-video/{slug}'> + img data-src + alt=TITRE
+    // (⚠ sauts de ligne entre attributs — tolérance [\s\S] obligatoire)
+    // + cartes Cactus (hentaivost.fr) en secours.
     // -------------------------------------------------------------------------
-    private fun parseCards(html: String): List<SearchResponse> {
+    private fun parseCards(html: String, baseUrl: String): List<SearchResponse> {
         val out = LinkedHashMap<String, SearchResponse>()
         Regex(
-            """<div class="picture-content">\s*<a href="(?:https?://[^"]*?)/([a-z0-9%.-]{6,})/"[^>]*title="([^"]+)""" +
+            """id=["']thumbs-\d+["'][\s\S]{0,60}?class='vignFloatH tl'[\s\S]{0,300}?href='(?:https?://[^']*)/hentai-video/([a-z0-9-]+)'[\s\S]{0,900}?alt=["']([^"']+)["']"""
+        ).findAll(html).forEach { m ->
+            val (slug, title) = m.destructured
+            if (title.isBlank()) return@forEach
+            val imgTag = Regex("""<img[^>]*>""").find(m.groupValues[0])?.groupValues?.get(0).orEmpty()
+            val img = Regex("""data-src='([^']+)'""").find(imgTag)?.groupValues?.get(1)
+                ?: Regex("""data-src="([^"]+)"""").find(imgTag)?.groupValues?.get(1)
+                ?: Regex("""\ssrc='([^']+)'""").find(imgTag)?.groupValues?.get(1)
+            out[slug] = newMovieSearchResponse(title, "$baseUrl/hentai-video/$slug", TvType.NSFW) {
+                this.posterUrl = img
+            }
+        }
+        if (out.isNotEmpty()) return out.values.toList()
+        // secours : cartes Cactus de hentaivost.fr (ancienne structure)
+        Regex(
+            """<div class="picture-content">\s*<a href="(?:https?://[^"]*?)/([a-z0-9%.-]{6,})/"[^>]*title="([^"]+)"""" +
                 """"[\s\S]{0,500}?<img[^>]+src="([^"]+)""""
         ).findAll(html).forEach { m ->
             val (slug, title, img) = m.destructured
             if (title.isBlank()) return@forEach
-            out[slug] = newMovieSearchResponse(title, "$mainUrl/$slug/", TvType.NSFW) {
+            out[slug] = newMovieSearchResponse(title, "$baseUrl/hentai-video/$slug", TvType.NSFW) {
                 this.posterUrl = img
             }
         }
@@ -163,49 +176,66 @@ class HentaiVostProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
+        val bridge = currentBridge()
         val url = when {
-            request.data.isBlank() && page <= 1 -> "$mainUrl/hp/hentai-video/"
-            request.data.isBlank() -> "$mainUrl/hp/hentai-video/page/$page/"
-            request.data in setOf("news", "reupload") && page <= 1 -> "$mainUrl/hp/hentai-video/${request.data}/"
-            request.data in setOf("news", "reupload") -> "$mainUrl/hp/hentai-video/${request.data}/page/$page/"
-            page <= 1 -> "$mainUrl/hp/hentai-video/?genre=${request.data}"
-            else -> "$mainUrl/hp/hentai-video/page/$page/?genre=${request.data}"
+            request.data.startsWith("cat:") -> "$bridge/hentai-streaming/${request.data.removePrefix("cat:")}/$page"
+            request.data.startsWith("tag:") -> "$bridge/tags-video/${request.data.removePrefix("tag:")}/$page"
+            else -> "$bridge/hentai-streaming/hentai-sous-titre-francais-vostfr/$page"
         }
-        val html = httpGet(url) ?: return newHomePageResponse(request, emptyList(), false)
-        val items = parseCards(html)
-        return newHomePageResponse(request, items, hasNext = items.size >= 8)
+        val html = httpGet(url, referer = "$bridge/")
+            ?: return newHomePageResponse(request, emptyList(), false)
+        val items = parseCards(html, bridge)
+        return newHomePageResponse(request, items, hasNext = items.size >= 12)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         syncUrl()
         val q = java.net.URLEncoder.encode(query.trim(), "UTF-8")
         if (q.isEmpty()) return emptyList()
-        val html = httpGet("$mainUrl/?s=$q") ?: return emptyList()
-        return parseCards(html)
+        val bridge = currentBridge()
+        val html = runCatching {
+            app.get(
+                "$bridge/search/$q/1",
+                headers = headers() + mapOf("Cookie" to "searchType=hentai"),
+                interceptor = cfKiller
+            ).text
+        }.getOrNull() ?: return emptyList()
+        return parseCards(html, bridge)
     }
 
     // -------------------------------------------------------------------------
-    // Fiche
+    // Fiche — moteur fap en premier (slugs identiques), hentaivost en secours
     // -------------------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse {
         syncUrl()
-        val html = httpGet(url) ?: throw ErrorLoadingException()
         val slug = url.trimEnd('/').substringAfterLast('/')
+        val bridge = currentBridge()
+
+        // 1) fiche du pont (hentai-fap.fr) — pas de défi Cloudflare
+        var html = httpGet("$bridge/hentai-video/$slug", referer = "$bridge/")
+
+        // 2) secours : fiche native hentaivost.fr
+        if (html == null || "stream_ep" !in html) {
+            html = httpGet(url) ?: html
+        }
+        if (html == null) throw ErrorLoadingException()
+
         val title = Regex("""<meta property="og:title" content="([^"]*)"""").find(html)?.groupValues?.get(1)?.trim()
             ?: Regex("""<title>([^<|–-]+)""").find(html)?.groupValues?.get(1)?.trim()
             ?: slug.replace('-', ' ')
         val poster = Regex("""<meta property="og:image" content="([^"]*)"""").find(html)?.groupValues?.get(1)
         val plot = Regex("""<meta property="og:description" content="([^"]*)"""").find(html)?.groupValues?.get(1)
             ?: Regex("""<meta name="description" content="([^"]*)"""").find(html)?.groupValues?.get(1)
-        return newMovieLoadResponse(title, url, TvType.NSFW, url) {
+        return newMovieLoadResponse(title, url, TvType.NSFW, "$bridge/hentai-video/$slug") {
             this.posterUrl = poster
             this.plot = plot
         }
     }
 
     // -------------------------------------------------------------------------
-    // Lecture : page hentaivost (lecteur du réseau) sinon pont hentai-fap
-    // (même slug) avec la chaîne validée csrfToken → getlink → MP4 signé
+    // Lecture — chaîne VALIDÉE du pont : /hentai-video/{slug} → div#stream_ep
+    // (data-v, data-f) → /ajax/csrfToken.php → /ajax/getlink.php → MP4 signé
+    // (hentaivost.fr n'est essayé qu'en dernier secours)
     // -------------------------------------------------------------------------
     private data class StreamEp(val v: String, val f: String, val type: String, val server: String)
 
@@ -225,14 +255,18 @@ class HentaiVostProvider : MainAPI() {
         val token = runCatching {
             app.get(
                 "$base/ajax/csrfToken.php",
-                headers = headers(referer) + mapOf("X-Requested-With" to "XMLHttpRequest"),
+                headers = headers(referer) + mapOf(
+                    "X-Requested-With" to "XMLHttpRequest",
+                    "Accept" to "application/json, text/javascript, */*; q=0.01"
+                ),
                 interceptor = cfKiller
             ).text
         }.getOrNull()?.let { Regex(""""token"\s*:\s*"([^"]+)"""").find(it)?.groupValues?.get(1) }
         val postHeaders = buildMap {
             putAll(headers(referer))
             put("X-Requested-With", "XMLHttpRequest")
-            put("Content-Type", "application/x-www-form-urlencoded")
+            put("Accept", "application/json, text/javascript, */*; q=0.01")
+            put("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             if (token != null) put("X-CSRF-Token", token)
         }
         val signed = runCatching {
@@ -254,16 +288,16 @@ class HentaiVostProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         syncUrl()
-        val slug = data.trimEnd('/').substringAfterLast('/')
-        val html = httpGet(data)
+        val bridge = currentBridge()
 
-        // 1) lecteur directement dans la page hentaivost
-        if (html != null) {
-            findStreamEp(html)?.let { ep ->
-                val link = fapSignedLink(currentBridge(), ep, data) ?: return@let
+        // 1) pont hentai-fap.fr : fiche + lecteur signé (chaîne validée)
+        val fapHtml = httpGet(data.takeIf { "hentai-video/" in it } ?: data, referer = "$bridge/")
+        if (fapHtml != null) {
+            findStreamEp(fapHtml)?.let { ep ->
+                val link = fapSignedLink(bridge, ep, data) ?: return@let
                 callback(
                     ExtractorLink(
-                        name, name, link, "$mainUrl/",
+                        name, name, link, "$bridge/",
                         quality = Qualities.Unknown.value,
                         type = ExtractorLinkType.VIDEO
                     )
@@ -271,7 +305,7 @@ class HentaiVostProvider : MainAPI() {
                 return true
             }
             // iframes du lecteur réseau (player?v=…)
-            Regex("""<iframe[^>]*\ssrc="(https?://[^"]+)"""").findAll(html).forEach { m ->
+            Regex("""<iframe[^>]*\ssrc="(https?://[^"]+)"""").findAll(fapHtml).forEach { m ->
                 val u = m.groupValues[1]
                 if ("player?v=" in u) {
                     runCatching {
@@ -282,10 +316,26 @@ class HentaiVostProvider : MainAPI() {
             }
         }
 
-        // 2) pont : même slug sur hentai-fap.fr (chaîne validée)
-        val bridge = currentBridge()
-        val fapHtml = httpGet("$bridge/hentai-video/$slug", referer = "$bridge/")
-        val ep = fapHtml?.let { findStreamEp(it) } ?: return false
+        // 2) secours : lecteur directement dans la page hentaivost native
+        val slug = data.trimEnd('/').substringAfterLast('/')
+        val nativeHtml = httpGet("$mainUrl/$slug/")
+        if (nativeHtml != null) {
+            findStreamEp(nativeHtml)?.let { ep ->
+                val link = fapSignedLink(bridge, ep, "$mainUrl/$slug/") ?: return@let
+                callback(
+                    ExtractorLink(
+                        name, name, link, "$mainUrl/",
+                        quality = Qualities.Unknown.value,
+                        type = ExtractorLinkType.VIDEO
+                    )
+                )
+                return true
+            }
+        }
+
+        // 3) dernier recours : fiche fap par slug
+        val fapSlugHtml = httpGet("$bridge/hentai-video/$slug", referer = "$bridge/")
+        val ep = fapSlugHtml?.let { findStreamEp(it) } ?: return false
         val link = fapSignedLink(bridge, ep, "$bridge/hentai-video/$slug") ?: return false
         callback(
             ExtractorLink(

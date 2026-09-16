@@ -1,5 +1,25 @@
 # Journal des mises à jour
 
+## v11.2 — 2026-09-16 (Movix v3 agrégateur, Hentai-Fap v2, Hentai-VOSTFR v2)
+
+### 🔧 MovixProvider v3 — serveurs supplémentaires garantis (séries ET films)
+- **Diagnostic** : les serveurs propres au site sont souvent murés — vidzy.org affiche une page d'attente de 180 s, uqload.net renvoie 403, multiup ne liste que des hébergeurs de téléchargement, flixeo est instable. Le « 0 serveur » venait des sources, pas de l'extension.
+- **Supplément agrégateur** : après les serveurs du site, l'extension résout le titre en id IMDb (API de suggestion publique, sans clé) puis interroge **vidsrc.buzz** (embed → `var Q` → `a=sources` → `a=play`) → **jusqu'à 4 serveurs HLS proxysés** supplémentaires (VNE, English, VEM, XPM…). Vérifié : Game of Thrones S1E1 et films → flux `#EXTM3U` valides.
+- Page d'attente vidzy.org (180 s) détectée et ignorée instantanément ; retries sur les réponses 502 de l'agrégateur.
+
+### 🔧 HentaiFapProvider v2 — catalogue vide réparé
+- **Cause trouvée** : le HTML des cartes contient des **sauts de ligne entre les attributs** (`class='vignFloatH tl'` puis retour à la ligne puis `href=`) — la regex exigeait une espace unique → 0 carte sur l'appareil. Tolérance `[\s\S]` appliquée (12 cartes/page validées).
+- En-têtes XHR jQuery (`Accept: application/json…`) ajoutés sur `csrfToken.php`/`getlink.php` (403 sans eux sur certaines IP).
+
+### 🔧 HentaiVostProvider v2 — timeout réparé (moteur pont)
+- hentaivost.fr reste derrière un défi Cloudflare que CloudflareKiller ne résout pas sur l'appareil → **catalogue, recherche, fiches et lecture servis par le pont hentai-fap.fr** (réseau Hentai Paradise identique : mêmes slugs, mêmes lecteurs, **sans défi**). hentaivost.fr n'est plus qu'un secours pour la fiche.
+- Sections : Nouveautés VOSTFR · Non censuré · Harem · Inceste ; même correctif regex cartes que Hentai-Fap v2.
+
+### 📚 TUTO
+- §4.24 attente anti-bot 180 s vidzy.org · résolution titre→IMDb sans clé · ids IMDb acceptés par vidsrc.buzz · sauts de ligne entre attributs HTML · moteur-pont quand le site principal est muré.
+
+---
+
 ## v11.1 — 2026-09-16 (réparation serveurs + Hentai-Fap + Hentai-VOSTFR)
 
 ### 🔧 StreamixxProvider v4 — « aucun serveur » réparé

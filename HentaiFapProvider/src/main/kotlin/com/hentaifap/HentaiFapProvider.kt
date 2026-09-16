@@ -126,13 +126,15 @@ class HentaiFapProvider : MainAPI() {
     )
 
     // -------------------------------------------------------------------------
-    // Cartes : <a id="thumbs-…" class='vignFloatH tl' href='…/hentai-video/{slug}'>
-    //          + <img … data-src=… alt=TITRE>  (guillemets mixtes !
-    //          id en doubles, class/href en simples)
+    // Cartes : <a id="thumbs-…"
+    //            class='vignFloatH tl'
+    //            href='…/hentai-video/{slug}'> + <img … data-src=… alt=TITRE>
+    // (guillemets mixtes : id en doubles, class/href en simples ;
+    //  ⚠ sauts de ligne entre attributs — tolérance [\s\S] OBLIGATOIRE)
     // -------------------------------------------------------------------------
     private fun parseCards(html: String): List<SearchResponse> {
         val out = LinkedHashMap<String, SearchResponse>()
-        Regex("""id=["']thumbs-\d+["'] class='vignFloatH tl' href='(?:https?://[^']*)/hentai-video/([a-z0-9-]+)'[\s\S]{0,900}?alt=["']([^"']+)["']""")
+        Regex("""id=["']thumbs-\d+["'][\s\S]{0,60}?class='vignFloatH tl'[\s\S]{0,300}?href='(?:https?://[^']*)/hentai-video/([a-z0-9-]+)'[\s\S]{0,900}?alt=["']([^"']+)["']""")
             .findAll(html).forEach { m ->
                 val (slug, title) = m.destructured
                 if (title.isBlank()) return@forEach
@@ -213,7 +215,10 @@ class HentaiFapProvider : MainAPI() {
         val token = runCatching {
             app.get(
                 "$mainUrl/ajax/csrfToken.php",
-                headers = headers(data) + mapOf("X-Requested-With" to "XMLHttpRequest"),
+                headers = headers(data) + mapOf(
+                    "X-Requested-With" to "XMLHttpRequest",
+                    "Accept" to "application/json, text/javascript, */*; q=0.01"
+                ),
                 interceptor = cfKiller
             ).text
         }.getOrNull()?.let { runCatching { AppUtils_tok.parse(it) }.getOrNull() }
@@ -222,7 +227,8 @@ class HentaiFapProvider : MainAPI() {
         val postHeaders = buildMap {
             putAll(headers(data))
             put("X-Requested-With", "XMLHttpRequest")
-            put("Content-Type", "application/x-www-form-urlencoded")
+            put("Accept", "application/json, text/javascript, */*; q=0.01")
+            put("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             if (token != null) put("X-CSRF-Token", token)
         }
         val signed = runCatching {
