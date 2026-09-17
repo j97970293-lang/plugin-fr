@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "Xalaflix — films & séries VF/VOSTFR multi-serveurs (registry de domaine auto)"

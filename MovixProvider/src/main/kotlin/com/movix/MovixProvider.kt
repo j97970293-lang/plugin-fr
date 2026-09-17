@@ -186,6 +186,29 @@ class MovixProvider : MainAPI() {
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class VsServer(val ref: String? = null, val name: String? = null)
 
+    // ⚠ l'API renvoie désormais un OBJET {"status":..,"servers":[..]} et non
+    // plus une liste brute — l'ancien parsing List<VsServer> échouait en silence
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class VsSources(val status: String? = null, val servers: List<VsServer> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxImdb(val imdb_id: String? = null)
+
+    // liens de l'API du réseau Frembed (url RELATIVE /api/stream?…)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class FbLinks(val links: List<FbLink> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class FbLink(
+        val url: String? = null,
+        val lang: String? = null,
+        val label: String? = null,
+        val host: FbHost? = null
+    ) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        data class FbHost(val name: String? = null, val slug: String? = null)
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class VsPlay(val url: String? = null)
 
@@ -233,7 +256,14 @@ class MovixProvider : MainAPI() {
             ?: return newHomePageResponse(request, emptyList(), false)
         val root = runCatching { AppUtils.parseJson<TmdbPage>(json) }.getOrNull()
             ?: return newHomePageResponse(request, emptyList(), false)
-        val items = root.results.mapNotNull { tmdbCard(it) }
+        // ⚠ movie/* et tv/* ne renvoient PAS media_type : sans le type de la
+        // section, TOUTES les cartes sont filtrées (catalogue quasi vide)
+        val fallbackType = when {
+            request.data.startsWith("movie") -> "movie"
+            request.data.startsWith("tv") -> "tv"
+            else -> null
+        }
+        val items = root.results.mapNotNull { tmdbCard(it, fallbackType) }
         val hasNext = page < (root.total_pages ?: 1).coerceAtMost(500)
         return newHomePageResponse(request, items, hasNext = hasNext)
     }
@@ -411,51 +441,22 @@ class MovixProvider : MainAPI() {
             }
         }
 
-        // ---- 3) lecteurs publics TMDB en parallèle (contenu absent du site :
-        //      Green Lantern, Resident Evil, animes… → d'autres agrégateurs
-        //      les ont — chaque source a un catalogue différent) ----
-        coroutineScope {
-            val embeds = buildList {
-                if (isTv && season != null && episode != null) {
-                    add("https://player.videasy.net/tv/$tmdb/$season/$episode" to "Videasy")
-                    add("https://frembed.skin/embed/serie/$tmdb?sa=$season&epi=$episode" to "Frembed")
-                    add("https://vidfast.pro/tv/$tmdb/$season/$episode?autoPlay=true&sub=fr" to "VidFast")
-                    add("https://vidsrc.cc/v2/embed/tv/$tmdb/$season/$episode" to "VidSrc.cc")
-                    add("https://www.vidsrc.wtf/api/2/tv/?id=$tmdb&s=$season&e=$episode" to "VidSrc.wtf")
-                    add("https://www.2embed.cc/embedtv/$tmdb&s=$season&e=$episode" to "2Embed")
-                    add("https://111movies.com/tv/$tmdb/$season/$episode" to "111Movies")
-                    add("https://vidnest.fun/tv/$tmdb/$season/$episode" to "VidNest")
-                } else {
-                    add("https://player.videasy.net/movie/$tmdb" to "Videasy")
-                    add("https://frembed.skin/embed/movie/$tmdb" to "Frembed")
-                    add("https://vidfast.pro/movie/$tmdb?autoPlay=true&sub=fr" to "VidFast")
-                    add("https://vidsrc.cc/v2/embed/movie/$tmdb" to "VidSrc.cc")
-                    add("https://www.vidsrc.wtf/api/3/movie/?id=$tmdb" to "VidSrc.wtf")
-                    add("https://www.2embed.cc/embed/$tmdb" to "2Embed")
-                    add("https://111movies.com/movie/$tmdb" to "111Movies")
-                    add("https://vidnest.fun/movie/$tmdb" to "VidNest")
-                }
-            }
-            embeds.forEach { (u, label) ->
-                launch(Dispatchers.IO) {
-                    runCatching {
-                        withTimeoutOrNull(15_000) {
-                            val nm = "Movix+ · $label"
-                            val ok = loadExtractor(u, "$mainUrl/", subtitleCallback) { l ->
-                                foundFlag.set(true)
-                                callback(l)
-                            }
-                            if (!ok && genericExtract(u, nm, subtitleCallback) { l ->
-                                    foundFlag.set(true)
-                                    callback(l)
-                                }) foundFlag.set(true)
-                        }
-                    }
-                }
+        // ---- 3) réseau Frembed en cascade (Voe/Dood/Uqload réels par API) ----
+        //      Les « embeds publics » (Videasy, VidFast, 2Embed, VidSrc.cc…)
+        //      chargent leur flux par XHR côté client : AUCUNE URL extractible
+        //      côté extension (testé : 0 m3u8 sur 8 lecteurs). Le réseau Frembed
+        //      publie ses serveurs par API : links[] → /api/stream (relative)
+        //      → cookies + Sec-Fetch iframe → 302 vers l'hôte réel.
+        runCatching {
+            withTimeoutOrNull(20_000) {
+                if (frembedNetworkLinks(tmdb, isTv, season, episode, subtitleCallback) { l ->
+                        foundFlag.set(true)
+                        callback(l)
+                    }) foundFlag.set(true)
             }
         }
 
-        // ---- 4) agrégateur vidsrc.buzz (HLS proxysés directs) ----
+        // ---- 4) agrégateur vidsrc.buzz (TMDB, puis id IMDb en secours) ----
         val aggFound = runCatching { vidsrcBuzzLinks(tmdb, isTv, season, episode, callback) }.getOrDefault(false)
         return foundFlag.get() || aggFound
     }
@@ -464,6 +465,42 @@ class MovixProvider : MainAPI() {
     // vidsrc.buzz — agrégateur TMDB, HLS proxysés directs (chaîne validée :
     // /embed/{type}/{tmdb}[/s/e] → var Q → a=sources → a=play en parallèle)
     // -------------------------------------------------------------------------
+    // --- headers exacts observés quand un navigateur ouvre /api/stream en iframe
+    private val streamNavHeaders = mapOf(
+        "User-Agent" to (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/151.0.0.0 Safari/537.36"
+            ),
+        "Accept" to (
+            "text/html,application/xhtml+xml,application/xml;q=0.9," +
+                "image/avif,image/webp,image/apng,*/*;q=0.8," +
+                "application/signed-exchange;v=b3;q=0.7"
+            ),
+        "Accept-Language" to "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Sec-Fetch-Dest" to "iframe",
+        "Sec-Fetch-Mode" to "navigate",
+        "Sec-Fetch-Site" to "same-origin",
+        "Sec-Fetch-User" to "?1",
+        "Upgrade-Insecure-Requests" to "1"
+    )
+
+    // --- id IMDb via TMDB (clé publique du réseau) : certains contenus n'ont
+    //     de serveurs sur vidsrc.buzz QUE par leur id IMDb (ex : Resident Evil)
+    private suspend fun fetchImdbId(tmdbId: String, isTv: Boolean): String? {
+        val path = if (isTv) "tv" else "movie"
+        return runCatching {
+            val j = app.get(
+                "$TMDB_BASE/$path/$tmdbId/external_ids?api_key=$TMDB_KEY&language=fr-FR",
+                headers = tmdbHeaders()
+            ).text
+            AppUtils.parseJson<MxImdb>(j).imdb_id?.takeIf { it.startsWith("tt") }
+        }.getOrNull()
+    }
+
+    // --- agrégateur vidsrc.buzz : HLS proxysés directs ; si l'id TMDB ne donne
+    //     rien, on retente avec l'id IMDb (catalogue plus large pour les vieux
+    //     films : Resident Evil 2002, Green Lantern…)
     private suspend fun vidsrcBuzzLinks(
         tmdbId: String,
         isTv: Boolean,
@@ -471,13 +508,29 @@ class MovixProvider : MainAPI() {
         episode: Int?,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val embedUrl = if (isTv && season != null && episode != null) {
-            "https://vidsrc.buzz/embed/tv/$tmdbId/$season/$episode"
-        } else if (isTv) {
-            "https://vidsrc.buzz/embed/tv/$tmdbId/1/1"
-        } else {
-            "https://vidsrc.buzz/embed/movie/$tmdbId"
+        val foundFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun buildEmbed(id: String): String = when {
+            isTv && season != null && episode != null ->
+                "https://vidsrc.buzz/embed/tv/$id/$season/$episode"
+            isTv -> "https://vidsrc.buzz/embed/tv/$id/1/1"
+            else -> "https://vidsrc.buzz/embed/movie/$id"
         }
+
+        tryBuzzEmbed(buildEmbed(tmdbId), callback, foundFlag)
+        if (!foundFlag.get()) {
+            val imdb = fetchImdbId(tmdbId, isTv)
+            if (imdb != null && imdb != tmdbId) {
+                tryBuzzEmbed(buildEmbed(imdb), callback, foundFlag)
+            }
+        }
+        return foundFlag.get()
+    }
+
+    private suspend fun tryBuzzEmbed(
+        embedUrl: String,
+        callback: (ExtractorLink) -> Unit,
+        foundFlag: java.util.concurrent.atomic.AtomicBoolean
+    ): Boolean {
         val vsHeaders = mapOf(
             "User-Agent" to USER_AGENT,
             "Accept" to "application/json",
@@ -493,16 +546,17 @@ class MovixProvider : MainAPI() {
         val srcJson = runCatching {
             app.get("https://vidsrc.buzz/pl/api.php?a=sources&$qs", headers = vsHeaders).text
         }.getOrNull() ?: return false
-        val servers = runCatching { AppUtils.parseJson<List<VsServer>>(srcJson) }.getOrNull() ?: return false
-        val foundFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        // ⚠ réponse = {"status":"ok","servers":[…]} (objet, plus une liste brute)
+        val servers = runCatching { AppUtils.parseJson<VsSources>(srcJson).servers }.getOrNull()
+            ?: return false
         coroutineScope {
-            servers.take(4).forEach { sv ->
+            servers.take(6).forEach { sv ->
                 launch(Dispatchers.IO) {
                     val ref = sv.ref?.takeIf { it.isNotBlank() } ?: return@launch
                     val svName = sv.name?.replace(Regex("""^Server\s+"""), "")?.trim()
                         ?.takeIf { it.isNotBlank() } ?: "Agrégateur"
                     var u: String? = null
-                    for (attempt in 1..2) {
+                    for (attempt in 1..3) {
                         val play = runCatching {
                             app.get(
                                 "https://vidsrc.buzz/pl/api.php?a=play&ref=${java.net.URLEncoder.encode(ref, "UTF-8")}" +
@@ -512,7 +566,7 @@ class MovixProvider : MainAPI() {
                         }.getOrNull() ?: break
                         u = runCatching { AppUtils.parseJson<VsPlay>(play).url }.getOrNull()
                         if (!u.isNullOrBlank()) break
-                        if (attempt == 1) delay(1200)
+                        if (attempt < 3) delay(1300)
                     }
                     val raw = u?.takeIf { it.isNotBlank() } ?: return@launch
                     val link = if (raw.startsWith("/")) "https://vidsrc.buzz$raw" else raw
@@ -531,13 +585,89 @@ class MovixProvider : MainAPI() {
         return foundFlag.get()
     }
 
-    // -------------------------------------------------------------------------
-    // Extraction générique (hébergeurs sans extracteur dédié)
-    // -------------------------------------------------------------------------
-    private val directStreamRegex = Regex("""https?://[^"'\\\s<>]+\.(?:m3u8|mp4|webm)[^"'\\\s<>]*""")
+    // --- réseau Frembed : serveurs réels du réseau (Voe/Dood/Uqload) par API.
+    //     links[].url est RELATIF (/api/stream?…) : il faut la page de contenu
+    //     en Referer + les cookies de session, avec les headers d'iframe → 302
+    //     vers l'hôte réel, que loadExtractor sait ensuite décoder.
+    private suspend fun frembedNetworkLinks(
+        tmdb: String,
+        isTv: Boolean,
+        season: Int?,
+        episode: Int?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val origin = "https://frembed.surf"
+        val contentPage = if (isTv) "$origin/series?id=$tmdb" else "$origin/films?id=$tmdb"
+        val apiUrl = when {
+            isTv && season != null && episode != null ->
+                "$origin/api/series?id=$tmdb&sa=$season&epi=$episode&idType=tmdb"
+            isTv -> "$origin/api/series?id=$tmdb&sa=1&epi=1&idType=tmdb"
+            else -> "$origin/api/films?id=$tmdb&idType=tmdb"
+        }
+        // cookies de session (la page doit être « primée » comme dans un navigateur)
+        runCatching { app.get(contentPage, headers = mapOf("User-Agent" to USER_AGENT)) }
+        val apiJson = runCatching {
+            app.get(
+                apiUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to "$origin/",
+                    "Accept" to "application/json"
+                )
+            ).text
+        }.getOrNull() ?: return false
+        val links = runCatching { AppUtils.parseJson<FbLinks>(apiJson).links }.getOrNull() ?: return false
+        var found = false
+        links.forEach { l ->
+            val raw = l.url?.takeIf { it.isNotBlank() } ?: return@forEach
+            val streamUrl = if (raw.startsWith("http")) raw else "$origin$raw"
+            val hostName = l.host?.name?.takeIf { it.isNotBlank() }
+                ?: l.label?.takeIf { it.isNotBlank() } ?: "Serveur"
+            val lang = l.lang?.uppercase()?.take(5)?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
+            val label = "Movix+ · Frembed $hostName$lang"
+            // résout /api/stream → URL réelle de l'hôte (302 Location)
+            val target = runCatching {
+                val resp = app.get(
+                    streamUrl,
+                    headers = streamNavHeaders + mapOf("Referer" to contentPage),
+                    allowRedirects = false
+                )
+                when (resp.okhttpResponse.code) {
+                    in 300..399 -> resp.okhttpResponse.headers["Location"]?.takeIf { it.startsWith("http") }
+                    200 -> Regex("""https?://[a-zA-Z0-9.-]+/[^'	
+ <>]+""")
+                        .findAll(resp.text)
+                        .mapNotNull { it.value }
+                        .firstOrNull {
+                            "frembed" !in it && "cloudflare" !in it && "static." !in it && "fonts" !in it
+                        }
+                    else -> null
+                }
+            }.getOrNull()
+            if (target != null) {
+                runCatching {
+                    withTimeoutOrNull(15_000) {
+                        val ok = loadExtractor(target, "$origin/", subtitleCallback) { e ->
+                            found = true
+                            callback(e)
+                        }
+                        if (!ok && genericExtract(target, label, subtitleCallback) { e ->
+                                found = true
+                                callback(e)
+                            }) found = true
+                    }
+                }
+            }
+        }
+        return found
+    }
+
+    private val directStreamRegex = Regex("""https?://[^"'\s<>]+\.(?:m3u8|mp4|webm)[^"'\s<>]*""")
+
     private val junkFilterRegex = Regex(
-        """(?i)(youtube|youtu\.be|dailymotion|\.jpg|\.jpeg|\.png|\.gif|\.webp|\.svg|\.vtt|\.srt|""" +
-            """/ads?/|adserve|adservice|adsystem|doubleclick|banner|/pixel|analytics|/thumb|poster|trailer)"""
+        """(?:google|facebook|twitter|recaptcha|cloudflare|adservice|doubleclick|""" +
+            """googletagmanager|analytics|adsystem|ads\.|-ad_|_ad\.|/ad/|sponsor)"""
     )
 
     private suspend fun genericExtract(

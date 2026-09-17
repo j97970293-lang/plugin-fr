@@ -331,8 +331,50 @@ class XalaflixProvider : MainAPI() {
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class VsServer(val ref: String? = null, val name: String? = null)
 
+    // ⚠ l'API renvoie un OBJET {"status":..,"servers":[..]}, pas une liste brute
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class VsSources(val status: String? = null, val servers: List<VsServer> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class XfImdb(val imdb_id: String? = null)
+
+    // liens de l'API du réseau Frembed (url RELATIVE /api/stream?…)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class XfLinks(val links: List<XfLink> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class XfLink(
+        val url: String? = null,
+        val lang: String? = null,
+        val label: String? = null,
+        val host: XfHost? = null
+    ) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        data class XfHost(val name: String? = null, val slug: String? = null)
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class VsPlay(val url: String? = null)
+
+    // --- headers exacts observés quand un navigateur ouvre /api/stream en iframe
+    private val streamNavHeaders = mapOf(
+        "User-Agent" to (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/151.0.0.0 Safari/537.36"
+            ),
+        "Accept" to (
+            "text/html,application/xhtml+xml,application/xml;q=0.9," +
+                "image/avif,image/webp,image/apng,*/*;q=0.8," +
+                "application/signed-exchange;v=b3;q=0.7"
+            ),
+        "Accept-Language" to "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Sec-Fetch-Dest" to "iframe",
+        "Sec-Fetch-Mode" to "navigate",
+        "Sec-Fetch-Site" to "same-origin",
+        "Sec-Fetch-User" to "?1",
+        "Upgrade-Insecure-Requests" to "1"
+    )
 
     private suspend fun vidsrcBuzzLinks(
         tmdbId: String,
@@ -341,20 +383,45 @@ class XalaflixProvider : MainAPI() {
         episode: Int?,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val embedUrl = if (isTv && season != null && episode != null) {
-            "https://vidsrc.buzz/embed/tv/$tmdbId/$season/$episode"
-        } else if (isTv) {
-            "https://vidsrc.buzz/embed/tv/$tmdbId/1/1"
-        } else {
-            "https://vidsrc.buzz/embed/movie/$tmdbId"
+        val foundFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun buildEmbed(id: String): String = when {
+            isTv && season != null && episode != null ->
+                "https://vidsrc.buzz/embed/tv/$id/$season/$episode"
+            isTv -> "https://vidsrc.buzz/embed/tv/$id/1/1"
+            else -> "https://vidsrc.buzz/embed/movie/$id"
         }
+        tryBuzzEmbed(buildEmbed(tmdbId), callback, foundFlag)
+        if (!foundFlag.get()) {
+            // certains contenus n'ont de serveurs QUE par leur id IMDb
+            val imdb = fetchImdbId(tmdbId, isTv)
+            if (imdb != null && imdb != tmdbId) tryBuzzEmbed(buildEmbed(imdb), callback, foundFlag)
+        }
+        return foundFlag.get()
+    }
+
+    private suspend fun fetchImdbId(tmdbId: String, isTv: Boolean): String? {
+        val path = if (isTv) "tv" else "movie"
+        return runCatching {
+            val j = app.get(
+                "https://api.themoviedb.org/3/$path/$tmdbId/external_ids?api_key=f3d757824f08ea2cff45eb8f47ca3a1e&language=fr-FR",
+                headers = headers()
+            ).text
+            AppUtils.parseJson<XfImdb>(j).imdb_id?.takeIf { it.startsWith("""tt""") }
+        }.getOrNull()
+    }
+
+    private suspend fun tryBuzzEmbed(
+        embedUrl: String,
+        callback: (ExtractorLink) -> Unit,
+        foundFlag: java.util.concurrent.atomic.AtomicBoolean
+    ): Boolean {
         val vsHeaders = mapOf(
             "User-Agent" to USER_AGENT,
             "Accept" to "application/json",
             "Referer" to embedUrl
         )
         val html = runCatching { app.get(embedUrl, headers = vsHeaders).text }.getOrNull() ?: return false
-        val qm = Regex("""var Q = (\{.*?\});""", RegexOption.DOT_MATCHES_ALL).find(html) ?: return false
+        val qm = Regex("""var Q = (\\{.*?\\});""", RegexOption.DOT_MATCHES_ALL).find(html) ?: return false
         val q = runCatching { AppUtils.parseJson<VsQ>(qm.groupValues[1]) }.getOrNull() ?: return false
         val id = q.id?.takeIf { it.isNotBlank() } ?: return false
         val token = q.t?.takeIf { it.isNotBlank() } ?: return false
@@ -363,16 +430,15 @@ class XalaflixProvider : MainAPI() {
         val srcJson = runCatching {
             app.get("https://vidsrc.buzz/pl/api.php?a=sources&$qs", headers = vsHeaders).text
         }.getOrNull() ?: return false
-        val servers = runCatching { AppUtils.parseJson<List<VsServer>>(srcJson) }.getOrNull() ?: return false
-        val foundFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        val servers = runCatching { AppUtils.parseJson<VsSources>(srcJson).servers }.getOrNull() ?: return false
         coroutineScope {
-            servers.take(4).forEach { sv ->
+            servers.take(6).forEach { sv ->
                 launch(Dispatchers.IO) {
                     val ref = sv.ref?.takeIf { it.isNotBlank() } ?: return@launch
-                    val svName = sv.name?.replace(Regex("""^Server\s+"""), "")?.trim()
+                    val svName = sv.name?.replace(Regex("""^Server\\s+"""), "")?.trim()
                         ?.takeIf { it.isNotBlank() } ?: "Agrégateur"
                     var u: String? = null
-                    for (attempt in 1..2) {
+                    for (attempt in 1..3) {
                         val play = runCatching {
                             app.get(
                                 "https://vidsrc.buzz/pl/api.php?a=play&ref=${java.net.URLEncoder.encode(ref, "UTF-8")}" +
@@ -382,7 +448,7 @@ class XalaflixProvider : MainAPI() {
                         }.getOrNull() ?: break
                         u = runCatching { AppUtils.parseJson<VsPlay>(play).url }.getOrNull()
                         if (!u.isNullOrBlank()) break
-                        if (attempt == 1) delay(1200)
+                        if (attempt < 3) kotlinx.coroutines.delay(1300)
                     }
                     val raw = u?.takeIf { it.isNotBlank() } ?: return@launch
                     val link = if (raw.startsWith("/")) "https://vidsrc.buzz$raw" else raw
@@ -401,130 +467,79 @@ class XalaflixProvider : MainAPI() {
         return foundFlag.get()
     }
 
-    override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
+    // --- réseau Frembed : serveurs réels du réseau (Voe/Dood/Uqload) par API.
+    //     links[].url est RELATIF (/api/stream?…) : cookies + Referer fiche +
+    //     headers iframe → 302 vers l'hôte réel, décodé ensuite par loadExtractor.
+    private suspend fun frembedNetworkLinks(
+        tmdb: String,
+        isTv: Boolean,
+        season: Int?,
+        episode: Int?,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        ensureDomain()
-        val html = runCatching {
-            app.get(data, headers = headers(), interceptor = cfKiller).text
+        val origin = "https://frembed.surf"
+        val contentPage = if (isTv) "$origin/series?id=$tmdb" else "$origin/films?id=$tmdb"
+        val apiUrl = when {
+            isTv && season != null && episode != null ->
+                "$origin/api/series?id=$tmdb&sa=$season&epi=$episode&idType=tmdb"
+            isTv -> "$origin/api/series?id=$tmdb&sa=1&epi=1&idType=tmdb"
+            else -> "$origin/api/films?id=$tmdb&idType=tmdb"
+        }
+        runCatching { app.get(contentPage, headers = headers()) }
+        val apiJson = runCatching {
+            app.get(
+                apiUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to "$origin/",
+                    "Accept" to "application/json"
+                )
+            ).text
         }.getOrNull() ?: return false
-
-        // slug + type + épisode + titre de la page, pour l'agrégateur vidsrc.buzz
-        val path = data.substringAfter("://", "").substringAfter('/', "").trim('/')
-        val parts = path.split("/")
-        val isTvEpisode = parts.firstOrNull() == "episode"
-        val isTvShow = parts.firstOrNull() == "tv-show" || isTvEpisode
-        val slug = parts.getOrNull(1)?.takeIf { it.isNotBlank() }
-        val se = parts.getOrNull(2)?.split("-")
-        val season = se?.getOrNull(0)?.toIntOrNull()
-        val episode = se?.getOrNull(1)?.toIntOrNull()
-        // id TMDB du contenu (présent dans les liens des lecteurs du site)
-        val tmdb = Regex("""[?&]tmdb=(\d+)""").find(html)?.groupValues?.get(1)
-        // supplément : lecteurs publics TMDB + vidsrc.buzz (chaque source a un
-        // catalogue différent — le contenu manquant chez Xalaflix y est souvent)
-        suspend fun tryAggregator(): Boolean {
-            val t = tmdb ?: return false
-            var found = false
-            coroutineScope {
-                val embeds = buildList {
-                    if (isTvShow && season != null && episode != null) {
-                        add("https://player.videasy.net/tv/$t/$season/$episode" to "Videasy")
-                        add("https://vidfast.pro/tv/$t/$season/$episode?autoPlay=true&sub=fr" to "VidFast")
-                        add("https://vidsrc.cc/v2/embed/tv/$t/$season/$episode" to "VidSrc.cc")
-                        add("https://www.2embed.cc/embedtv/$t&s=$season&e=$episode" to "2Embed")
-                        add("https://111movies.com/tv/$t/$season/$episode" to "111Movies")
-                        add("https://vidnest.fun/tv/$t/$season/$episode" to "VidNest")
-                    } else {
-                        add("https://player.videasy.net/movie/$t" to "Videasy")
-                        add("https://vidfast.pro/movie/$t?autoPlay=true&sub=fr" to "VidFast")
-                        add("https://vidsrc.cc/v2/embed/movie/$t" to "VidSrc.cc")
-                        add("https://www.2embed.cc/embed/$t" to "2Embed")
-                        add("https://111movies.com/movie/$t" to "111Movies")
-                        add("https://vidnest.fun/movie/$t" to "VidNest")
-                    }
-                }
-                embeds.forEach { (u, label) ->
-                    launch(Dispatchers.IO) {
-                        runCatching {
-                            withTimeoutOrNull(15_000) {
-                                val nm = "Xalaflix+ · $label"
-                                val ok = loadExtractor(u, mainUrl, subtitleCallback) { l ->
-                                    found = true
-                                    callback(l)
-                                }
-                                if (!ok && genericExtract(u, nm, subtitleCallback) { l ->
-                                        found = true
-                                        callback(l)
-                                    }) found = true
-                            }
+        val links = runCatching { AppUtils.parseJson<XfLinks>(apiJson).links }.getOrNull() ?: return false
+        var found = false
+        links.forEach { l ->
+            val raw = l.url?.takeIf { it.isNotBlank() } ?: return@forEach
+            val streamUrl = if (raw.startsWith("http")) raw else "$origin$raw"
+            val hostName = l.host?.name?.takeIf { it.isNotBlank() }
+                ?: l.label?.takeIf { it.isNotBlank() } ?: "Serveur"
+            val lang = l.lang?.uppercase()?.take(5)?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
+            val label = "Xalaflix+ · Frembed $hostName$lang"
+            val target = runCatching {
+                val resp = app.get(
+                    streamUrl,
+                    headers = streamNavHeaders + mapOf("Referer" to contentPage),
+                    allowRedirects = false
+                )
+                when (resp.okhttpResponse.code) {
+                    in 300..399 -> resp.okhttpResponse.headers["Location"]?.takeIf { it.startsWith("http") }
+                    200 -> Regex("""https?://[a-zA-Z0-9.-]+/[^'	
+ <>]+""")
+                        .findAll(resp.text)
+                        .mapNotNull { it.value }
+                        .firstOrNull {
+                            "frembed" !in it && "cloudflare" !in it && "static." !in it && "fonts" !in it
                         }
-                    }
+                    else -> null
                 }
-            }
-            val agg = runCatching { vidsrcBuzzLinks(t, isTvShow, season, episode, callback) }.getOrDefault(false)
-            return found || agg
-        }
-
-        val foundFlag = java.util.concurrent.atomic.AtomicBoolean(false)
-        val videosJson = Regex("""(?:const|var|let)\s+videos\s*=\s*(\[[\s\S]*?\]);""").find(html)?.groupValues?.get(1)
-        val videos = videosJson?.let { runCatching { AppUtils.parseJson<List<MvVideo>>(it) }.getOrNull() }
-
-        // fallback : iframes d'embed visibles dans le HTML (en parallèle, bornées)
-        if (videos.isNullOrEmpty()) {
-            coroutineScope {
-                Regex("""<iframe[^>]*\ssrc="(https?://[^"]+)"""").findAll(html).forEach { m ->
-                    val u = m.groupValues[1]
-                    if (u.contains("xalaflix.") || u.contains("google") || u.contains("facebook")) return@forEach
-                    launch(Dispatchers.IO) {
-                        runCatching {
-                            withTimeoutOrNull(15_000) {
-                                if (loadExtractor(u, data, subtitleCallback) { l ->
-                                        foundFlag.set(true)
-                                        callback(l)
-                                    }) foundFlag.set(true)
-                            }
+            }.getOrNull()
+            if (target != null) {
+                runCatching {
+                    withTimeoutOrNull(15_000) {
+                        val ok = loadExtractor(target, "$origin/", subtitleCallback) { e ->
+                            found = true
+                            callback(e)
                         }
-                    }
-                }
-            }
-            if (foundFlag.get()) return true
-            return tryAggregator()
-        }
-
-        // serveurs du site — EN PARALLÈLE, chacun borné à 15 s
-        // (vidzy.org = attente 180 s, flixeo = timeouts : ne jamais bloquer
-        // toute la liste sur un hôte mort)
-        coroutineScope {
-            videos.forEach { v ->
-                launch(Dispatchers.IO) {
-                    val link = v.link?.takeIf { it.startsWith("http") } ?: return@launch
-                    val version = v.version?.takeIf { it.isNotBlank() } ?: ""
-                    val server = v.server_name?.takeIf { it.isNotBlank() } ?: name
-                    val label = buildString {
-                        append(server)
-                        if (version.isNotBlank()) append(" · $version")
-                        if (!v.label.isNullOrBlank()) append(" · ${v.label}")
-                    }
-                    runCatching {
-                        withTimeoutOrNull(15_000) {
-                            // extracteurs connus (dood, voe, filemoon, uqload, multiup…)
-                            val ok = loadExtractor(link, mainUrl, subtitleCallback) { l ->
-                                foundFlag.set(true)
-                                callback(l)
-                            }
-                            if (!ok && genericExtract(link, label, subtitleCallback, callback)) foundFlag.set(true)
-                        }
+                        if (!ok && genericExtract(target, label, subtitleCallback) { e ->
+                                found = true
+                                callback(e)
+                            }) found = true
                     }
                 }
             }
         }
-
-        // ---- Supplément agrégateur vidsrc.buzz (HLS multi-serveurs) ----
-        val aggFound = tryAggregator()
-        return foundFlag.get() || aggFound
+        return found
     }
 
     // -------------------------------------------------------------------------

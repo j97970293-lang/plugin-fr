@@ -121,6 +121,28 @@ class FrembedProvider : MainAPI() {
     @Volatile
     private var resolvedDomain: String? = null
 
+    // Headers exacts observés quand un navigateur ouvre /api/stream en iframe.
+    // /api/stream exige : cookies de session + Referer de la fiche + Sec-Fetch
+    // iframe → répond 302 Location = URL réelle de l'hôte (voe/dood/uqload).
+    private val streamNavHeaders = mapOf(
+        "User-Agent" to (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/151.0.0.0 Safari/537.36"
+            ),
+        "Accept" to (
+            "text/html,application/xhtml+xml,application/xml;q=0.9," +
+                "image/avif,image/webp,image/apng,*/*;q=0.8," +
+                "application/signed-exchange;v=b3;q=0.7"
+            ),
+        "Accept-Language" to "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Sec-Fetch-Dest" to "iframe",
+        "Sec-Fetch-Mode" to "navigate",
+        "Sec-Fetch-Site" to "same-origin",
+        "Sec-Fetch-User" to "?1",
+        "Upgrade-Insecure-Requests" to "1"
+    )
+
     private fun headers(referer: String? = null) = buildMap {
         put("User-Agent", USER_AGENT)
         put("Accept-Language", "fr-FR,fr;q=0.9")
@@ -293,6 +315,13 @@ class FrembedProvider : MainAPI() {
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class VsServer(val ref: String? = null, val name: String? = null)
 
+    // ⚠ l'API renvoie un OBJET {"status":..,"servers":[..]}, pas une liste brute
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class VsSources(val status: String? = null, val servers: List<VsServer> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class FbImdb(val imdb_id: String? = null)
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class VsPlay(val url: String? = null)
 
@@ -407,21 +436,31 @@ class FrembedProvider : MainAPI() {
         val links = apiJson?.let { runCatching { AppUtils.parseJson<FbResponse>(it).links }.getOrNull() }
             ?: emptyList()
 
+        // ⚠ links[].url est RELATIF (/api/stream?type=…&server=id:…) : il faut
+        // le résoudre en 302 vers l'hôte réel (cookies + Referer fiche + iframe)
+        val contentPage = if (isTv) "$origin/series?id=$tmdb" else "$origin/films?id=$tmdb"
+        // amorce la session (cookies) sur la même page que le navigateur
+        runCatching { app.get(contentPage, headers = headers()) }
         coroutineScope {
             links.forEach { l ->
                 launch(Dispatchers.IO) {
-                    val link = l.url?.takeIf { it.startsWith("http") } ?: return@launch
+                    val raw = l.url?.takeIf { it.isNotBlank() } ?: return@launch
+                    val streamUrl = if (raw.startsWith("http")) raw else "$origin$raw"
                     val hostName = l.host?.name?.takeIf { it.isNotBlank() }
                         ?: l.label?.takeIf { it.isNotBlank() } ?: "Serveur"
-                    val lang = l.lang?.uppercase()?.take(4)?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
+                    val lang = l.lang?.uppercase()?.take(5)?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
                     val label = "Frembed · $hostName$lang"
                     runCatching {
                         withTimeoutOrNull(15_000) {
-                            val ok = loadExtractor(link, "$origin/", subtitleCallback) { e ->
-                                foundFlag.set(true)
-                                callback(e)
+                            // /api/stream → 302 Location = page voe/dood/uqload
+                            val target = resolveStream(streamUrl, contentPage)
+                            if (target != null) {
+                                val ok = loadExtractor(target, "$origin/", subtitleCallback) { e ->
+                                    foundFlag.set(true)
+                                    callback(e)
+                                }
+                                if (!ok && genericExtract(target, label, callback)) foundFlag.set(true)
                             }
-                            if (!ok && genericExtract(link, label, callback)) foundFlag.set(true)
                         }
                     }
                 }
@@ -433,6 +472,26 @@ class FrembedProvider : MainAPI() {
         return foundFlag.get() || aggFound
     }
 
+    // résout /api/stream?… → URL réelle de l'hébergeur :
+    // 302 Location, sinon (page 200) première URL externe du corps
+    private suspend fun resolveStream(streamUrl: String, contentPage: String): String? = runCatching {
+        val resp = app.get(
+            streamUrl,
+            headers = streamNavHeaders + mapOf("Referer" to contentPage),
+            allowRedirects = false
+        )
+        when (resp.okhttpResponse.code) {
+            in 300..399 -> resp.okhttpResponse.headers["Location"]?.takeIf { it.startsWith("http") }
+            200 -> Regex("""https?://[a-zA-Z0-9.-]+/[^"\t\n <>]+""")
+                .findAll(resp.text)
+                .mapNotNull { it.value }
+                .firstOrNull {
+                    "frembed" !in it && "cloudflare" !in it && "static." !in it && "fonts" !in it
+                }
+            else -> null
+        }
+    }.getOrNull()
+
     // -------------------------------------------------------------------------
     // vidsrc.buzz — HLS proxysés (embed → var Q → a=sources → a=play parallèle)
     // -------------------------------------------------------------------------
@@ -443,13 +502,38 @@ class FrembedProvider : MainAPI() {
         episode: Int?,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val embedUrl = if (isTv && season != null && episode != null) {
-            "https://vidsrc.buzz/embed/tv/$tmdbId/$season/$episode"
-        } else if (isTv) {
-            "https://vidsrc.buzz/embed/tv/$tmdbId/1/1"
-        } else {
-            "https://vidsrc.buzz/embed/movie/$tmdbId"
+        val foundFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun buildEmbed(id: String): String = when {
+            isTv && season != null && episode != null ->
+                "https://vidsrc.buzz/embed/tv/$id/$season/$episode"
+            isTv -> "https://vidsrc.buzz/embed/tv/$id/1/1"
+            else -> "https://vidsrc.buzz/embed/movie/$id"
         }
+        tryBuzzEmbed(buildEmbed(tmdbId), callback, foundFlag)
+        if (!foundFlag.get()) {
+            // certains contenus n'ont de serveurs QUE par leur id IMDb
+            val imdb = fetchImdbId(tmdbId, isTv)
+            if (imdb != null && imdb != tmdbId) tryBuzzEmbed(buildEmbed(imdb), callback, foundFlag)
+        }
+        return foundFlag.get()
+    }
+
+    private suspend fun fetchImdbId(tmdbId: String, isTv: Boolean): String? {
+        val path = if (isTv) "tv" else "movie"
+        return runCatching {
+            val j = app.get(
+                "$TMDB_BASE/$path/$tmdbId/external_ids?api_key=$TMDB_KEY&language=fr-FR",
+                headers = headers()
+            ).text
+            AppUtils.parseJson<FbImdb>(j).imdb_id?.takeIf { it.startsWith("tt") }
+        }.getOrNull()
+    }
+
+    private suspend fun tryBuzzEmbed(
+        embedUrl: String,
+        callback: (ExtractorLink) -> Unit,
+        foundFlag: java.util.concurrent.atomic.AtomicBoolean
+    ): Boolean {
         val vsHeaders = mapOf(
             "User-Agent" to USER_AGENT,
             "Accept" to "application/json",
@@ -465,16 +549,15 @@ class FrembedProvider : MainAPI() {
         val srcJson = runCatching {
             app.get("https://vidsrc.buzz/pl/api.php?a=sources&$qs", headers = vsHeaders).text
         }.getOrNull() ?: return false
-        val servers = runCatching { AppUtils.parseJson<List<VsServer>>(srcJson) }.getOrNull() ?: return false
-        val foundFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        val servers = runCatching { AppUtils.parseJson<VsSources>(srcJson).servers }.getOrNull() ?: return false
         coroutineScope {
-            servers.take(4).forEach { sv ->
+            servers.take(6).forEach { sv ->
                 launch(Dispatchers.IO) {
                     val ref = sv.ref?.takeIf { it.isNotBlank() } ?: return@launch
                     val svName = sv.name?.replace(Regex("""^Server\s+"""), "")?.trim()
                         ?.takeIf { it.isNotBlank() } ?: "Agrégateur"
                     var u: String? = null
-                    for (attempt in 1..2) {
+                    for (attempt in 1..3) {
                         val play = runCatching {
                             app.get(
                                 "https://vidsrc.buzz/pl/api.php?a=play&ref=${java.net.URLEncoder.encode(ref, "UTF-8")}" +
@@ -484,7 +567,7 @@ class FrembedProvider : MainAPI() {
                         }.getOrNull() ?: break
                         u = runCatching { AppUtils.parseJson<VsPlay>(play).url }.getOrNull()
                         if (!u.isNullOrBlank()) break
-                        if (attempt == 1) kotlinx.coroutines.delay(1200)
+                        if (attempt < 3) kotlinx.coroutines.delay(1300)
                     }
                     val raw = u?.takeIf { it.isNotBlank() } ?: return@launch
                     val link = if (raw.startsWith("/")) "https://vidsrc.buzz$raw" else raw

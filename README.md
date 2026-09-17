@@ -21,9 +21,9 @@
 | **HentaiCityProvider** | hentaicity.com | 🔞 hentai & 3D animés — HLS directs |
 | **HentaiHavenProvider** | hentaihaven.xxx | 🔞 Rule34 animé — HLS directs |
 | **XvideosProvider** | xvideos.com | 🔞 vidéos amateurs & studios — HLS directs |
-| **MovixProvider** | movix.men | films & séries VF — 13+ serveurs réels par contenu + lecteurs publics + agrégateur |
-| **FrembedProvider** | frembed.surf | films & séries VF — Voe/Dood/Uqload réels, domaine auto |
-| **XalaflixProvider** | xalaflix.tax | films & séries VF/VOSTFR multi-serveurs, registry de domaine auto |
+| **MovixProvider** | movix.men | films & séries VF — serveurs du site + réseau Frembed + agrégateur (secours id IMDb) |
+| **FrembedProvider** | frembed.surf | films & séries VF — Voe/Dood/Uqload réels (API 302), domaine auto, secours IMDb |
+| **XalaflixProvider** | xalaflix.tax | films & séries VF/VOSTFR multi-serveurs + réseau Frembed + secours IMDb |
 | **TrixHentaiProvider** | trixhentai.com | 🔞 hentai **VOSTFR** — MP4 directs |
 | **PornovoreProvider** | pornovore.fr | 🔞 films X **français** — MP4 directs |
 | **AdkamiHentaiProvider** | hentai.adkami.com | 🔞 hentai **VOSTFR/raw** — catalogue Adkami |
@@ -40,8 +40,8 @@
 <details>
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
-- repo.json (v11.5, 26 sources) : `https://x0.at/rr7v.json`
-- plugins.json (liste des 26 extensions, v11.5) : `https://x0.at/P89Y.json`
+- repo.json (v11.6, 26 sources) : `https://x0.at/rr7v.json`
+- plugins.json (liste des 26 extensions, v11.6) : `https://x0.at/P89Y.json`
 - MovixProvider v6 : `https://x0.at/Uy8W.cs3` · FrembedProvider v1 : `https://x0.at/5gfj.cs3` · XalaflixProvider v1 : `https://x0.at/o97h.cs3` · WaveWatch v7 : `https://x0.at/dDfv.cs3` · Zenix v8 : `https://x0.at/tYS4.cs3` · 1JOUR1FILM v6 : `https://x0.at/jWyq.cs3` · CineStream v5 : `https://x0.at/h484.cs3` · Télé FR Direct v2 (Madagascar 🇲🇬) : `https://x0.at/MpNP.cs3` · AnimeSama v6 : `https://x0.at/i1wf.cs3` · AnimeSite v5 : `https://x0.at/ABrQ.cs3` · FrenchStream v5 : `https://x0.at/943P.cs3` · Purstream v5 : `https://x0.at/yD9r.cs3` · Vostfree v4 : `https://x0.at/Mozr.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.

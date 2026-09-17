@@ -1074,3 +1074,34 @@ s'acharner sur l'extraction :
    entier puis lire chaque attribut séparément.
 
 
+### 4.28 DÉBOGAGE SYSTÉMATIQUE DES « AUCUN SERVEUR » (v11.6)
+
+1. **Tester avec les VRAIS ids** : tmdb 13055 n'est PAS Resident Evil (c'est
+   « Chance », 2002) — une campagne de tests sur un id faux fait croire qu'un
+   site n'a pas un contenu qu'il a (Green Lantern = 13 serveurs sur movix.men
+   avec le bon id 44912 !). Toujours vérifier `title` via l'API avant de
+   conclure.
+2. **Les réponses d'API changent de forme** : vidsrc.buzz renvoie désormais
+   `{"status":"ok","servers":[…]}` et non plus `[…]` — `parseJson<List<T>>`
+   échoue **en silence** dans un `runCatching` : plus aucun serveur sans
+   erreur visible. Croiser les formes (liste OU objet) et re-tester en live.
+3. **URLs relatives** : `links[].url = "/api/stream?…"` → un filtre
+   `startsWith("http")` ignore TOUT. Résoudre : origin + chemin, puis suivre
+   la chaîne d'authentification du site (cookies de session via amorce de la
+   fiche, Referer exact, headers Sec-Fetch d'iframe, `allowRedirects=false`
+   pour lire le `Location` du 302).
+4. **Les players « SPA » ne sont pas extractibles côté extension** : Videasy,
+   VidFast, 2Embed, 111Movies, VidNest… chargent leur m3u8 par XHR après
+   exécution JS → `genericExtract` + JsUnpacker ne donnent rien (vérifié sur
+   8 lecteurs : 0 flux). Préférer les API JSON publiques du réseau
+   (frembed links[], vidsrc.buzz api.php) et les players à jwplayer
+   p.a.c.k.e.r (livavid) ou m3u8 direct (vidzy).
+5. **Secours id IMDb** : les agrégateurs indexent tantôt par TMDB, tantôt par
+   IMDb — si l'id TMDB ne donne rien, `external_ids` (même clé publique) puis
+   nouvel essai avec l'id IMDb.
+6. **Sections TMDB sans `media_type`** : `movie/popular`, `top_rated`,
+   `upcoming`… ne renvoient PAS `media_type` (contrairement à `trending`) —
+   filtrer sur `media_type` seul vide la section : passer le type de la
+   section en paramètre de repli.
+
+

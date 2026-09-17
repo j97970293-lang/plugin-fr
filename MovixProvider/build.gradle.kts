@@ -1,8 +1,8 @@
 // Use an integer for version numbers
-version = 6
+version = 7
 
 cloudstream {
-    description = "Movix — films & séries VF (vrai site movix.men : 13+ serveurs réels par contenu + agrégateur)"
+    description = "Movix — films & séries VF : serveurs movix.men + réseau Frembed + agrégateur (secours id IMDb), 13-30 serveurs"
     authors = listOf("j97970293-lang")
     status = 1
     tvTypes = listOf("Movie", "TvSeries")

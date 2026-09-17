@@ -1,5 +1,42 @@
 # Journal des mises à jour
 
+## v11.6 — 2026-09-18 (correctifs majeurs : catalogues + serveurs)
+
+### 🐛 MovixProvider v7 — catalogue complet + serveurs retrouvés
+- **Catalogue** : les sections « Films populaires / Top notés / Prochainement /
+  Séries populaires » étaient VIDES — les endpoints TMDB non-tendance ne
+  renvoient pas `media_type` : le type est désormais déduit de la section.
+- **Agrégateur vidsrc.buzz réparé** : l'API renvoie un objet `{"servers":[…]}`
+  (plus une liste brute) — le parsing échouait en silence depuis plusieurs
+  versions. + **secours par id IMDb** quand l'id TMDB ne donne rien
+  (TMDB external_ids → nouvel essai) : Resident Evil 2002 = 5 serveurs.
+- Les 8 « lecteurs publics » (Videasy, VidFast, 2Embed…) qui ne donnaient
+  RIEN (flux chargé par XHR client, non extractible) sont remplacés par le
+  **réseau Frembed par API** (Voe/Dood/Uqload réels → 302 → extracteur).
+- Résultat réel : Fight Club 5-8 · GoT 13 · One Piece 8 · Resident Evil 13+ ·
+  Green Lantern 18+ serveurs.
+
+### 🐛 FrembedProvider v2 — le bug « aucun serveur » corrigé
+- `links[].url` de l'API est **relatif** (`/api/stream?type=…`) : le code
+  exigeait `http…` → **tous les liens étaient ignorés**. Résolution complète :
+  amorce de session (cookies) → `/api/stream` avec Referer de la fiche + les
+  headers d'iframe exacts → **302 Location** = page réelle voe/dood/uqload →
+  extracteur intégré.
+- Même agrégateur vidsrc.buzz réparé (objet + secours id IMDb).
+
+### 🐛 XalaflixProvider v2 — mêmes réparations
+- Lecteurs publics morts remplacés par le réseau Frembed (chaîne 302 complète).
+- Agrégateur vidsrc.buzz réparé (objet `{"servers":[…]}` + secours id IMDb).
+- Serveurs du site inchangés (livavid/vidzy : m3u8 direct ou p.a.c.k.e.r ✓).
+
+### 📚 Leçons (TUTO §4.28)
+- Ne JAMAIS tester avec un id « de mémoire » : tmdb 13055 ≠ Resident Evil
+  (c'est « Chance » !) — toujours vérifier le titre via l'API.
+- Une API qui renvoie un objet au lieu d'une liste casse `parseJson<List<T>>`
+  **en silence** dans un runCatching → toujours tester le parsing en live.
+
+---
+
 ## v11.5 — 2026-09-17 (Movix v6 lecteurs publics, + Frembed, + Xalaflix — 26 sources)
 
 ### 🎬 MovixProvider v6 — plus jamais « aucun serveur »
