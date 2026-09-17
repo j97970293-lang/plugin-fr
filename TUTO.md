@@ -1053,3 +1053,24 @@ s'acharner sur l'extraction :
    fonctionnent sur IP résidentielle/mobile avec les extracteurs officiels.
 
 
+### 4.27 CUMULER LES AGRÉGATEURS + RÉSOLUTION DE DOMAINE MULTI-NIVEAUX (v11.5)
+
+1. **Chaque agrégateur a un catalogue différent** : Resident Evil 2002 est absent de
+   movix.men ET de vidsrc.buzz, mais présent chez VidFast/2Embed/… → quand un contenu
+   n'a pas de serveurs, ne pas s'arrêter : **cascade de lecteurs publics TMDB**
+   (Videasy, VidFast, VidSrc.cc, 2Embed, 111Movies, VidNest…), tous en parallèle et
+   bornés dans le temps. Avec 3 niveaux (site + lecteurs publics + agrégateur HLS),
+   « aucun serveur » devient rare.
+2. **Les sites qui changent de domaine souvent** (Frembed, Xalaflix…) : résolution
+   multi-niveaux — adresse personnalisée (⚙) → config publique GitHub du site →
+   page d'annonce officielle → liste de secours intégrée. **Toujours valider le
+   candidat** (marqueurs du vrai catalogue) avant de l'adopter, et mettre en cache
+   le résultat pour la session.
+3. **Catalogue « vraie disponibilité »** : TMDB liste tout, le site n'a qu'une partie —
+   pour la recherche, sonder l'API du site (`links[]` non vide ?) avant d'afficher un
+   résultat : l'utilisateur ne voit que ce qui est réellement lisible.
+4. **Attributs d'étiquettes React en ordre alphabétique** : `alt` AVANT `src` dans
+   `<img>` → ne jamais écrire `src="…"…alt="…"` en ordre fixe ; capturer le tag
+   entier puis lire chaque attribut séparément.
+
+

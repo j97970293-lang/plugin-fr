@@ -1,6 +1,6 @@
 # Plugin fr · Dépôt d'extensions CloudStream
 
-**24 extensions** (films, séries, animes, TV live, 18+) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
+**26 extensions** (films, séries, animes, TV live, 18+) pour [CloudStream](https://github.com/recloudstream/cloudstream), mises à jour automatiquement par CI.
 
 | Extension | Site | Contenu |
 |---|---|---|
@@ -21,7 +21,9 @@
 | **HentaiCityProvider** | hentaicity.com | 🔞 hentai & 3D animés — HLS directs |
 | **HentaiHavenProvider** | hentaihaven.xxx | 🔞 Rule34 animé — HLS directs |
 | **XvideosProvider** | xvideos.com | 🔞 vidéos amateurs & studios — HLS directs |
-| **MovixProvider** | movix.men | films & séries VF — 13+ serveurs réels par contenu + agrégateur |
+| **MovixProvider** | movix.men | films & séries VF — 13+ serveurs réels par contenu + lecteurs publics + agrégateur |
+| **FrembedProvider** | frembed.surf | films & séries VF — Voe/Dood/Uqload réels, domaine auto |
+| **XalaflixProvider** | xalaflix.tax | films & séries VF/VOSTFR multi-serveurs, registry de domaine auto |
 | **TrixHentaiProvider** | trixhentai.com | 🔞 hentai **VOSTFR** — MP4 directs |
 | **PornovoreProvider** | pornovore.fr | 🔞 films X **français** — MP4 directs |
 | **AdkamiHentaiProvider** | hentai.adkami.com | 🔞 hentai **VOSTFR/raw** — catalogue Adkami |
@@ -38,8 +40,8 @@
 <details>
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
-- repo.json (v11.4, 24 sources) : `https://x0.at/dyyE.json`
-- plugins.json (liste des 24 extensions, v11.4) : `https://x0.at/RuRD.json`
+- repo.json (v11.5, 26 sources) : `https://x0.at/dyyE.json`
+- plugins.json (liste des 26 extensions, v11.5) : `https://x0.at/RuRD.json`
 - WaveWatch v7 : `https://x0.at/dDfv.cs3` · Zenix v8 : `https://x0.at/tYS4.cs3` · 1JOUR1FILM v6 : `https://x0.at/jWyq.cs3` · CineStream v5 : `https://x0.at/h484.cs3` · Télé FR Direct v2 (Madagascar 🇲🇬) : `https://x0.at/MpNP.cs3` · AnimeSama v6 : `https://x0.at/i1wf.cs3` · AnimeSite v5 : `https://x0.at/ABrQ.cs3` · FrenchStream v5 : `https://x0.at/943P.cs3` · Purstream v5 : `https://x0.at/yD9r.cs3` · Vostfree v4 : `https://x0.at/Mozr.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.

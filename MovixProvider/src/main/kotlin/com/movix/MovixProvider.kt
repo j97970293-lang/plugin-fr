@@ -384,38 +384,78 @@ class MovixProvider : MainAPI() {
         }?.let { it.player_links.ifEmpty { it.current_episode?.player_links ?: emptyList() } }
             ?: emptyList()
 
-        // ---- 2) Supplément agrégateur vidsrc.buzz (si le site n'a pas le
-        //      contenu : « Contenu non disponible », animes, séries récentes)
-        if (players.isEmpty()) {
-            return runCatching { vidsrcBuzzLinks(tmdb, isTv, season, episode, callback) }.getOrDefault(false)
-        }
-
-        // serveurs du site — en parallèle, chacun borné à 15 s
-        coroutineScope {
-            players.forEach { p ->
-                launch(Dispatchers.IO) {
-                    val link = p.decoded_url?.takeIf { it.startsWith("http") } ?: return@launch
-                    val hostLabel = p.quality?.trim()?.takeIf { it.isNotBlank() } ?: "Serveur Movix"
-                    val lang = when (p.language?.lowercase()) {
-                        "french", "fr" -> " · VF"
-                        null, "" -> ""
-                        else -> " · ${p.language?.uppercase()?.take(8)}"
-                    }
-                    val label = "$hostLabel$lang"
-                    runCatching {
-                        withTimeoutOrNull(15_000) {
-                            val ok = loadExtractor(link, "$mainUrl/", subtitleCallback) { l ->
-                                foundFlag.set(true)
-                                callback(l)
+        // ---- 2) serveurs du site — en parallèle, chacun borné à 15 s ----
+        if (players.isNotEmpty()) {
+            coroutineScope {
+                players.forEach { p ->
+                    launch(Dispatchers.IO) {
+                        val link = p.decoded_url?.takeIf { it.startsWith("http") } ?: return@launch
+                        val hostLabel = p.quality?.trim()?.takeIf { it.isNotBlank() } ?: "Serveur Movix"
+                        val lang = when (p.language?.lowercase()) {
+                            "french", "fr" -> " · VF"
+                            null, "" -> ""
+                            else -> " · ${p.language?.uppercase()?.take(8)}"
+                        }
+                        val label = "$hostLabel$lang"
+                        runCatching {
+                            withTimeoutOrNull(15_000) {
+                                val ok = loadExtractor(link, "$mainUrl/", subtitleCallback) { l ->
+                                    foundFlag.set(true)
+                                    callback(l)
+                                }
+                                if (!ok && genericExtract(link, label, subtitleCallback, callback)) foundFlag.set(true)
                             }
-                            if (!ok && genericExtract(link, label, subtitleCallback, callback)) foundFlag.set(true)
                         }
                     }
                 }
             }
         }
 
-        // ---- 3) agrégateur en supplément (toujours : plus de serveurs) ----
+        // ---- 3) lecteurs publics TMDB en parallèle (contenu absent du site :
+        //      Green Lantern, Resident Evil, animes… → d'autres agrégateurs
+        //      les ont — chaque source a un catalogue différent) ----
+        coroutineScope {
+            val embeds = buildList {
+                if (isTv && season != null && episode != null) {
+                    add("https://player.videasy.net/tv/$tmdb/$season/$episode" to "Videasy")
+                    add("https://frembed.skin/embed/serie/$tmdb?sa=$season&epi=$episode" to "Frembed")
+                    add("https://vidfast.pro/tv/$tmdb/$season/$episode?autoPlay=true&sub=fr" to "VidFast")
+                    add("https://vidsrc.cc/v2/embed/tv/$tmdb/$season/$episode" to "VidSrc.cc")
+                    add("https://www.vidsrc.wtf/api/2/tv/?id=$tmdb&s=$season&e=$episode" to "VidSrc.wtf")
+                    add("https://www.2embed.cc/embedtv/$tmdb&s=$season&e=$episode" to "2Embed")
+                    add("https://111movies.com/tv/$tmdb/$season/$episode" to "111Movies")
+                    add("https://vidnest.fun/tv/$tmdb/$season/$episode" to "VidNest")
+                } else {
+                    add("https://player.videasy.net/movie/$tmdb" to "Videasy")
+                    add("https://frembed.skin/embed/movie/$tmdb" to "Frembed")
+                    add("https://vidfast.pro/movie/$tmdb?autoPlay=true&sub=fr" to "VidFast")
+                    add("https://vidsrc.cc/v2/embed/movie/$tmdb" to "VidSrc.cc")
+                    add("https://www.vidsrc.wtf/api/3/movie/?id=$tmdb" to "VidSrc.wtf")
+                    add("https://www.2embed.cc/embed/$tmdb" to "2Embed")
+                    add("https://111movies.com/movie/$tmdb" to "111Movies")
+                    add("https://vidnest.fun/movie/$tmdb" to "VidNest")
+                }
+            }
+            embeds.forEach { (u, label) ->
+                launch(Dispatchers.IO) {
+                    runCatching {
+                        withTimeoutOrNull(15_000) {
+                            val nm = "Movix+ · $label"
+                            val ok = loadExtractor(u, "$mainUrl/", subtitleCallback) { l ->
+                                foundFlag.set(true)
+                                callback(l)
+                            }
+                            if (!ok && genericExtract(u, nm, subtitleCallback) { l ->
+                                    foundFlag.set(true)
+                                    callback(l)
+                                }) foundFlag.set(true)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- 4) agrégateur vidsrc.buzz (HLS proxysés directs) ----
         val aggFound = runCatching { vidsrcBuzzLinks(tmdb, isTv, season, episode, callback) }.getOrDefault(false)
         return foundFlag.get() || aggFound
     }

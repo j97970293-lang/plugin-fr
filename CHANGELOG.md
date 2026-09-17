@@ -1,5 +1,28 @@
 # Journal des mises à jour
 
+## v11.5 — 2026-09-17 (Movix v6 lecteurs publics, + Frembed, + Xalaflix — 26 sources)
+
+### 🎬 MovixProvider v6 — plus jamais « aucun serveur »
+- Contenu absent de movix.men (Green Lantern, Resident Evil, animes…) : chaque source a un catalogue différent → **8 lecteurs publics TMDB interrogés en parallèle** (Videasy, Frembed, VidFast, VidSrc.cc, VidSrc.wtf, 2Embed, 111Movies, VidNest) en plus des serveurs du site et de vidsrc.buzz.
+- Testé : Resident Evil 2002 absent de movix.men ET vidsrc.buzz → servi par les lecteurs publics.
+
+### 🆕 FrembedProvider — frembed.surf (méthode « vraie disponibilité »)
+- Le domaine change souvent → **résolution automatique** : adresse ⚙ → config publique GitHub du site → liste de secours, chaque candidat validé sur le catalogue.
+- Catalogue = les vraies disponibilités du site (600+ pages, pas de TMDB fantôme) ; recherche TMDB **filtrée par disponibilité réelle**.
+- Serveurs : `links[]` de l'API officielle (Voe, Dood, Uqload réels, langue par lien) + supplément vidsrc.buzz.
+
+### 🆕 XalaflixProvider — xalaflix.tax (l'architecture « Movix historique », vivante)
+- Page d'annonce xalaflix.online → domaine courant résolu et validé automatiquement.
+- Catalogue tendances/films/séries/Top IMDb + recherche ; saisons via Livewire ; serveurs `const videos` (vidzy XOR, kakaflix dood/voe, vidsrc.xyz…) en parallèle bornés 15 s.
+- Supplément : id TMDB lu dans les liens du site → lecteurs publics + vidsrc.buzz.
+
+### 📚 Méthodes adoptées (réseau d'extensions FR de référence)
+- Résolution de domaine multi-niveaux (config GitHub publique + page d'annonce + validation).
+- Catalogue « vraie disponibilité » (sonder l'API avant d'afficher un résultat de recherche).
+- Lecteurs publics TMDB en cascade : chaque agrégateur a un catalogue différent, les cumuler couvre presque tout.
+
+---
+
 ## v11.4 — 2026-09-17 (Movix v5 : le VRAI site movix.men, refonte complète)
 
 ### 🎬 MovixProvider v5 — refonte sur le vrai site
