@@ -85,3 +85,16 @@ Ce dépôt ne fait qu'indexer des sites publics tiers ; il n'héberge aucun cont
 - HentaiHavenProvider.cs3 : `https://x0.at/DVAe.cs3`
 - XvideosProvider.cs3 : `https://x0.at/AwtX.cs3`
 - TeleFranceProvider.cs3 (v3) : `https://x0.at/2Bk3.cs3`
+
+### 🔁 Miroirs v11.5 (si GitHub est bloqué)
+
+| Fichier | Lien direct |
+|---|---|
+| Dépôt complet (`repo.json`) | `https://x0.at/rr7v.json` |
+| Catalogue des 26 extensions (`plugins.json`) | `https://x0.at/P89Y.json` |
+| MovixProvider v6 | `https://x0.at/Uy8W.cs3` |
+| FrembedProvider v1 | `https://x0.at/5gfj.cs3` |
+| XalaflixProvider v1 | `https://x0.at/o97h.cs3` |
+
+Dans CloudStream : ⚙ → Dépôts → Ajouter → coller l'URL `repo.json` ci-dessus.
+Installation directe d'une extension : ⚙ → Extensions → ➕ → coller l'URL `.cs3`.
