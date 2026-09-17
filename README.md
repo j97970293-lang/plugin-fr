@@ -40,9 +40,9 @@
 <details>
 <summary>Miroirs (si GitHub est inaccessible)</summary>
 
-- repo.json (v11.5, 26 sources) : `https://x0.at/dyyE.json`
-- plugins.json (liste des 26 extensions, v11.5) : `https://x0.at/RuRD.json`
-- WaveWatch v7 : `https://x0.at/dDfv.cs3` · Zenix v8 : `https://x0.at/tYS4.cs3` · 1JOUR1FILM v6 : `https://x0.at/jWyq.cs3` · CineStream v5 : `https://x0.at/h484.cs3` · Télé FR Direct v2 (Madagascar 🇲🇬) : `https://x0.at/MpNP.cs3` · AnimeSama v6 : `https://x0.at/i1wf.cs3` · AnimeSite v5 : `https://x0.at/ABrQ.cs3` · FrenchStream v5 : `https://x0.at/943P.cs3` · Purstream v5 : `https://x0.at/yD9r.cs3` · Vostfree v4 : `https://x0.at/Mozr.cs3`
+- repo.json (v11.5, 26 sources) : `https://x0.at/rr7v.json`
+- plugins.json (liste des 26 extensions, v11.5) : `https://x0.at/P89Y.json`
+- MovixProvider v6 : `https://x0.at/Uy8W.cs3` · FrembedProvider v1 : `https://x0.at/5gfj.cs3` · XalaflixProvider v1 : `https://x0.at/o97h.cs3` · WaveWatch v7 : `https://x0.at/dDfv.cs3` · Zenix v8 : `https://x0.at/tYS4.cs3` · 1JOUR1FILM v6 : `https://x0.at/jWyq.cs3` · CineStream v5 : `https://x0.at/h484.cs3` · Télé FR Direct v2 (Madagascar 🇲🇬) : `https://x0.at/MpNP.cs3` · AnimeSama v6 : `https://x0.at/i1wf.cs3` · AnimeSite v5 : `https://x0.at/ABrQ.cs3` · FrenchStream v5 : `https://x0.at/943P.cs3` · Purstream v5 : `https://x0.at/yD9r.cs3` · Vostfree v4 : `https://x0.at/Mozr.cs3`
 
 Les adresses des miroirs sont re-publiées à chaque version.
 </details>
@@ -55,6 +55,12 @@ Les adresses des miroirs sont re-publiées à chaque version.
 ## Avertissement
 
 Ce dépôt ne fait qu'indexer des sites publics tiers ; il n'héberge aucun contenu. À usage strictement personnel — respectez les lois de votre pays.
+
+### Miroirs des nouveautés v11.5 (x0.at)
+- MovixProvider.cs3 (v6 — cascade 8 lecteurs publics en fallback) : `https://x0.at/Uy8W.cs3`
+- FrembedProvider.cs3 (v1 — frembed.surf, domaine auto, vraie dispo) : `https://x0.at/5gfj.cs3`
+- XalaflixProvider.cs3 (v1 — xalaflix.tax, registry auto) : `https://x0.at/o97h.cs3`
+- repo.json (26 sources) : `https://x0.at/rr7v.json` · plugins.json : `https://x0.at/P89Y.json`
 
 ### Miroirs des nouveautés v11.4 (x0.at)
 - MovixProvider.cs3 (v5 — refonte sur le vrai site movix.men, 13+ serveurs) : `https://x0.at/uYRa.cs3`
@@ -85,16 +91,3 @@ Ce dépôt ne fait qu'indexer des sites publics tiers ; il n'héberge aucun cont
 - HentaiHavenProvider.cs3 : `https://x0.at/DVAe.cs3`
 - XvideosProvider.cs3 : `https://x0.at/AwtX.cs3`
 - TeleFranceProvider.cs3 (v3) : `https://x0.at/2Bk3.cs3`
-
-### 🔁 Miroirs v11.5 (si GitHub est bloqué)
-
-| Fichier | Lien direct |
-|---|---|
-| Dépôt complet (`repo.json`) | `https://x0.at/rr7v.json` |
-| Catalogue des 26 extensions (`plugins.json`) | `https://x0.at/P89Y.json` |
-| MovixProvider v6 | `https://x0.at/Uy8W.cs3` |
-| FrembedProvider v1 | `https://x0.at/5gfj.cs3` |
-| XalaflixProvider v1 | `https://x0.at/o97h.cs3` |
-
-Dans CloudStream : ⚙ → Dépôts → Ajouter → coller l'URL `repo.json` ci-dessus.
-Installation directe d'une extension : ⚙ → Extensions → ➕ → coller l'URL `.cs3`.
