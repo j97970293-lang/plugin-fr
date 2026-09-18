@@ -1,4 +1,4 @@
-version = 2
+version = 3
 
 cloudstream {
     description = "Frembed — films & séries VF (Voe, Dood, Uqload… résolution de domaine auto)"

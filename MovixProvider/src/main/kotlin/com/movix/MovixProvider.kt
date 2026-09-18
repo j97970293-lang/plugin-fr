@@ -209,6 +209,73 @@ class MovixProvider : MainAPI() {
         data class FbHost(val name: String? = null, val slug: String? = null)
     }
 
+    // ── DTOs multi-sources réseau (api.movix.men) ──
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxPurstream(val sources: List<MxPurstreamSource> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxPurstreamSource(val url: String? = null, val name: String? = null, val format: String? = null)
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxWiflixPlayer(val url: String? = null, val name: String? = null, val player: String? = null)
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxWiflix(
+        val players: Map<String, List<MxWiflixPlayer>> = emptyMap(),
+        val movie: Map<String, List<MxWiflixPlayer>> = emptyMap(),
+        val episodes: Map<String, Map<String, List<MxWiflixPlayer>>> = emptyMap()
+    )
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxFstreamTv(val episodes: Map<String, MxFstreamEpisode> = emptyMap())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxFstreamEpisode(val languages: Map<String, List<MxWiflixPlayer>> = emptyMap())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxFstreamMovie(val links: Map<String, List<MxWiflixPlayer>> = emptyMap())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxCpasmal(val links: Map<String, List<MxWiflixPlayer>> = emptyMap())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxImdbRes(val series: List<MxImdbSeries> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxImdbSeries(val seasons: List<MxImdbSeason> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxImdbSeason(val episodes: List<MxImdbEpisode> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxImdbEpisode(val number: String? = null, val versions: Map<String, MxImdbVersion> = emptyMap())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxImdbVersion(val players: List<MxImdbPlayer> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxImdbPlayer(val link: String? = null)
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxLinksData(val id: String? = null, val links: List<Any?> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxLinksMovie(val data: MxLinksData? = null)
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxLinksTv(val data: List<MxLinksData> = emptyList())
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxDownload(val sources: List<MxDownloadSource>? = null)
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MxDownloadSource(
+        val m3u8: String? = null,
+        val src: String? = null,
+        val quality: String? = null,
+        val language: String? = null
+    )
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class VsPlay(val url: String? = null)
 
@@ -220,8 +287,16 @@ class MovixProvider : MainAPI() {
         "movie/popular" to "🎬 Films populaires",
         "movie/top_rated" to "⭐ Films les mieux notés",
         "movie/upcoming" to "🗓️ Prochainement",
+        "movie/now_playing" to "🍿 Au cinéma",
         "trending/tv/week" to "📺 Séries tendance",
-        "tv/popular" to "📼 Séries populaires"
+        "tv/popular" to "📼 Séries populaires",
+        "tv/top_rated" to "🏆 Séries les mieux notées",
+        "discover/movie?with_watch_providers=8&watch_region=FR" to "🎬 Netflix · Films",
+        "discover/tv?with_watch_providers=8&watch_region=FR" to "📺 Netflix · Séries",
+        "discover/movie?with_watch_providers=119&watch_region=FR" to "🎥 Prime Video · Films",
+        "discover/tv?with_watch_providers=119&watch_region=FR" to "📺 Prime Video · Séries",
+        "discover/movie?with_watch_providers=337&watch_region=FR" to "🏰 Disney+ · Films",
+        "discover/tv?with_watch_providers=337&watch_region=FR" to "🏰 Disney+ · Séries"
     )
 
     private fun tmdbCard(r: TmdbResult, fallbackType: String? = null): SearchResponse? {
@@ -247,11 +322,14 @@ class MovixProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         syncUrl()
+        // discover/*?with_watch_providers contient déjà une query (« & »)
+        val tmdbUrl = if ("?" in request.data) {
+            "$TMDB_BASE/${request.data}&api_key=$TMDB_KEY&language=fr-FR&page=$page"
+        } else {
+            "$TMDB_BASE/${request.data}?api_key=$TMDB_KEY&language=fr-FR&page=$page"
+        }
         val json = runCatching {
-            app.get(
-                "$TMDB_BASE/${request.data}?api_key=$TMDB_KEY&language=fr-FR&page=$page",
-                headers = tmdbHeaders()
-            ).text
+            app.get(tmdbUrl, headers = tmdbHeaders()).text
         }.getOrNull()
             ?: return newHomePageResponse(request, emptyList(), false)
         val root = runCatching { AppUtils.parseJson<TmdbPage>(json) }.getOrNull()
@@ -259,8 +337,8 @@ class MovixProvider : MainAPI() {
         // ⚠ movie/* et tv/* ne renvoient PAS media_type : sans le type de la
         // section, TOUTES les cartes sont filtrées (catalogue quasi vide)
         val fallbackType = when {
-            request.data.startsWith("movie") -> "movie"
-            request.data.startsWith("tv") -> "tv"
+            "movie" in request.data -> "movie"
+            "tv" in request.data -> "tv"
             else -> null
         }
         val items = root.results.mapNotNull { tmdbCard(it, fallbackType) }
@@ -420,6 +498,8 @@ class MovixProvider : MainAPI() {
                 players.forEach { p ->
                     launch(Dispatchers.IO) {
                         val link = p.decoded_url?.takeIf { it.startsWith("http") } ?: return@launch
+                        // jamais d'espagnol / allemand / italien… : VF et assimilés seulement
+                        if (unwantedLangName(p.language ?: "")) return@launch
                         val hostLabel = p.quality?.trim()?.takeIf { it.isNotBlank() } ?: "Serveur Movix"
                         val lang = when (p.language?.lowercase()) {
                             "french", "fr" -> " · VF"
@@ -441,18 +521,37 @@ class MovixProvider : MainAPI() {
             }
         }
 
-        // ---- 3) réseau Frembed en cascade (Voe/Dood/Uqload réels par API) ----
-        //      Les « embeds publics » (Videasy, VidFast, 2Embed, VidSrc.cc…)
-        //      chargent leur flux par XHR côté client : AUCUNE URL extractible
-        //      côté extension (testé : 0 m3u8 sur 8 lecteurs). Le réseau Frembed
-        //      publie ses serveurs par API : links[] → /api/stream (relative)
-        //      → cookies + Sec-Fetch iframe → 302 vers l'hôte réel.
-        runCatching {
-            withTimeoutOrNull(20_000) {
-                if (frembedNetworkLinks(tmdb, isTv, season, episode, subtitleCallback) { l ->
-                        foundFlag.set(true)
-                        callback(l)
-                    }) foundFlag.set(true)
+        // ---- 3) MULTI-SOURCES réseau + Frembed, en parallèle ----
+        //      api.movix.men expose aussi : purstream (m3u8 direct), wiflix,
+        //      frenchstream, cpasmal, imdb, liens directs et téléchargements —
+        //      filtrés par langue (VF / VOSTFR / TrueFrench / MULTI seulement).
+        //      Frembed : links[] → /api/stream (relative) → cookies + Sec-Fetch
+        //      iframe → 302 vers l'hôte réel (Voe/Dood/Uqload).
+        //      (« embeds publics » type Videasy/VidFast exclus : flux XHR client,
+        //      rien d'extractible — testé : 0 m3u8 sur 8 lecteurs.)
+        val siteTitle = mxJson?.let {
+            Regex("""["']?(?:title|name)["']?\s*:\s*["']([^"']+)["']""").find(it)?.groupValues?.get(1)
+        }
+        coroutineScope {
+            launch(Dispatchers.IO) {
+                runCatching {
+                    withTimeoutOrNull(25_000) {
+                        if (networkMultiSources(tmdb, isTv, season, episode, siteTitle, subtitleCallback) { l ->
+                                foundFlag.set(true)
+                                callback(l)
+                            }) foundFlag.set(true)
+                    }
+                }
+            }
+            launch(Dispatchers.IO) {
+                runCatching {
+                    withTimeoutOrNull(20_000) {
+                        if (frembedNetworkLinks(tmdb, isTv, season, episode, subtitleCallback) { l ->
+                                foundFlag.set(true)
+                                callback(l)
+                            }) foundFlag.set(true)
+                    }
+                }
             }
         }
 
@@ -553,6 +652,8 @@ class MovixProvider : MainAPI() {
             servers.take(6).forEach { sv ->
                 launch(Dispatchers.IO) {
                     val ref = sv.ref?.takeIf { it.isNotBlank() } ?: return@launch
+                    // pas de serveurs espagnol / allemand / etc.
+                    if (unwantedLangName(sv.name ?: "")) return@launch
                     val svName = sv.name?.replace(Regex("""^Server\s+"""), "")?.trim()
                         ?.takeIf { it.isNotBlank() } ?: "Agrégateur"
                     var u: String? = null
@@ -583,6 +684,210 @@ class MovixProvider : MainAPI() {
             }
         }
         return foundFlag.get()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // MULTI-SOURCES RÉSEAU : purstream (m3u8 direct), wiflix, frenchstream,
+    // cpasmal, imdb, liens directs + téléchargements — via l'API publique du
+    // réseau. FILTRE LANGUE : VF / VOSTFR / TrueFrench / MULTI uniquement ;
+    // jamais d'espagnol, allemand, italien… (clés filtrées + noms écartés).
+    // ═══════════════════════════════════════════════════════════════════════
+    private fun wantedLangKey(k: String): Boolean {
+        val l = k.trim().lowercase()
+        if (l.isEmpty()) return true
+        return l in setOf("vf", "vostfr", "truefrench", "french", "fr", "multi", "vo", "original", "en", "english") ||
+            "french" in l || l.startsWith("vf") || l.startsWith("vostfr")
+    }
+
+    private fun unwantedLangName(n: String): Boolean {
+        val l = n.lowercase()
+        return listOf(
+            "spanish", "español", "espanol", "latino", "castellano", "deutsch", "german",
+            "italiano", "italian", "hindi", "tamil", "telugu", "russian", "chinese",
+            "korean", "japanese", "portugues", "português", "turkish", "arabic", "dublado"
+        ).any { it in l }
+    }
+
+    private suspend fun networkMultiSources(
+        tmdb: String,
+        isTv: Boolean,
+        season: Int?,
+        episode: Int?,
+        title: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val api = currentApi() + "/api"
+        val site = api.removePrefix("https://api.").substringBefore('/')
+        val apiH = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Origin" to "https://$site",
+            "Referer" to "https://$site/"
+        )
+        val found = java.util.concurrent.atomic.AtomicBoolean(false)
+        suspend fun emit(label: String, url: String, quality: Int? = null) {
+            if (!url.startsWith("http")) return
+            found.set(true)
+            callback(
+                newExtractorLink(label, label, url) {
+                    this.quality = quality ?: Qualities.Unknown.value
+                    this.type = if (".m3u8" in url) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                }
+            )
+        }
+        suspend fun extract(label: String, url: String) {
+            if (unwantedLangName(label)) return
+            if (directStreamRegex.matches(url)) {
+                emit(label, url)
+                return
+            }
+            runCatching {
+                withTimeoutOrNull(15_000) {
+                    val ok = loadExtractor(url, "https://$site/", subtitleCallback) { l ->
+                        found.set(true)
+                        callback(l)
+                    }
+                    if (!ok && genericExtract(url, label, subtitleCallback) { l ->
+                            found.set(true)
+                            callback(l)
+                        }) found.set(true)
+                }
+            }
+        }
+        coroutineScope {
+            // 1) Purstream : HLS direct (« pulse | 1080p | MULTI »)
+            launch(Dispatchers.IO) {
+                runCatching {
+                    val u = if (isTv) "$api/purstream/tv/$tmdb/stream?season=${season ?: 1}&episode=${episode ?: 1}"
+                        else "$api/purstream/movie/$tmdb/stream"
+                    val j = app.get(u, headers = apiH).text
+                    AppUtils.parseJson<MxPurstream>(j).sources.forEach { src ->
+                        val url = src.url?.takeIf { it.startsWith("http") } ?: return@forEach
+                        if (unwantedLangName(src.name ?: "")) return@forEach
+                        val q = src.name?.filter { it.isDigit() }?.take(4)?.toIntOrNull()
+                        emit("Purstream · ${src.name ?: "stream"}", url, q)
+                    }
+                }
+            }
+            // 2) Wiflix (via cinestream) : players VF/VOSTFR
+            launch(Dispatchers.IO) {
+                runCatching {
+                    val u = if (isTv) "$api/wiflix/tv/$tmdb/${season ?: 1}" else "$api/wiflix/movie/$tmdb"
+                    val j = app.get(u, headers = apiH).text
+                    val res = AppUtils.parseJson<MxWiflix>(j)
+                    val langs: Map<String, List<MxWiflixPlayer>> = if (isTv) {
+                        episode?.toString()?.let { res.episodes[it] }
+                            ?: res.episodes.entries.firstOrNull()?.value
+                        ?: emptyMap()
+                    } else {
+                        res.players.ifEmpty { res.movie }
+                    }
+                    langs.filterKeys { wantedLangKey(it) }.forEach { (lang, list) ->
+                        list.forEach { p ->
+                            val url = p.url?.takeIf { it.startsWith("http") } ?: return@forEach
+                            extract("Wiflix · ${p.name ?: p.player ?: ""} · ${lang.uppercase()}", url)
+                        }
+                    }
+                }
+            }
+            // 3) FrenchStream : par langue (film) / par épisode (série)
+            launch(Dispatchers.IO) {
+                runCatching {
+                    val pairs: List<Pair<String, MxWiflixPlayer>> = if (isTv) {
+                        val j = app.get("$api/fstream/tv/$tmdb/season/${season ?: 1}", headers = apiH).text
+                        val eps = AppUtils.parseJson<MxFstreamTv>(j).episodes
+                        val ep = episode?.toString()?.let { eps[it] } ?: eps.entries.firstOrNull()?.value
+                        ep?.languages?.filterKeys { wantedLangKey(it) }?.flatMap { (lang, list) ->
+                            list.map { lang to it }
+                        } ?: emptyList()
+                    } else {
+                        val j = app.get("$api/fstream/movie/$tmdb", headers = apiH).text
+                        AppUtils.parseJson<MxFstreamMovie>(j).links.filterKeys { wantedLangKey(it) }
+                            .flatMap { (lang, list) -> list.map { lang to it } }
+                    }
+                    pairs.forEach { (lang, p) ->
+                        val url = p.url?.takeIf { it.startsWith("http") } ?: return@forEach
+                        extract("FrenchStream · ${p.player ?: p.name ?: ""} · ${lang.uppercase()}", url)
+                    }
+                }
+            }
+            // 4) Cpasmal (souvent 404 → silencieux)
+            launch(Dispatchers.IO) {
+                runCatching {
+                    val u = if (isTv) "$api/cpasmal/tv/$tmdb/${season ?: 1}/${episode ?: 1}"
+                        else "$api/cpasmal/movie/$tmdb"
+                    val j = app.get(u, headers = apiH).text.replace("\"players\":", "\"links\":")
+                    AppUtils.parseJson<MxCpasmal>(j).links.filterKeys { wantedLangKey(it) }
+                        .flatMap { (lang, list) -> list.map { lang to it } }
+                        .forEach { (lang, p) ->
+                            val url = p.url?.takeIf { it.startsWith("http") } ?: return@forEach
+                            extract("Cpasmal · ${lang.uppercase()}", url)
+                        }
+                }
+            }
+            // 5) IMDB (surtout séries)
+            launch(Dispatchers.IO) {
+                runCatching {
+                    val j = app.get("$api/imdb/${if (isTv) "tv" else "movie"}/$tmdb", headers = apiH).text
+                    AppUtils.parseJson<MxImdbRes>(j).series.asSequence()
+                        .flatMap { it.seasons.asSequence() }
+                        .flatMap { it.episodes.asSequence() }
+                        .filter { episode == null || it.number == episode.toString() }
+                        .flatMap { ep ->
+                            ep.versions.filterKeys { wantedLangKey(it) }.flatMap { (lang, ver) ->
+                                ver.players.map { lang to it }
+                            }
+                        }
+                        .forEach { (lang, p) ->
+                            val url = p.link?.takeIf { it.startsWith("http") } ?: return@forEach
+                            extract("IMDb · ${lang.uppercase()}", url)
+                        }
+                }
+            }
+            // 6) liens directs Movix (mp4/m3u8 + hébergeurs)
+            launch(Dispatchers.IO) {
+                runCatching {
+                    val q = if (isTv) "?season=${season ?: 1}&episode=${episode ?: 1}" else ""
+                    val j = app.get("$api/links/${if (isTv) "tv" else "movie"}/$tmdb$q", headers = apiH).text
+                    val list: List<Any?> = if (isTv) {
+                        AppUtils.parseJson<MxLinksTv>(j).data.flatMap { it.links }
+                    } else {
+                        AppUtils.parseJson<MxLinksMovie>(j).data?.links ?: emptyList()
+                    }
+                    list.forEach { el ->
+                        val url = (el as? String)?.takeIf { it.startsWith("http") }
+                            ?: (el as? Map<*, *>)?.get("url") as? String
+                        if (url != null) {
+                            val host = runCatching { java.net.URI(url).host }.getOrNull() ?: "lien"
+                            extract("Movix · $host", url)
+                        }
+                    }
+                }
+            }
+            // 7) téléchargements (m3u8 directs avec langue + qualité)
+            launch(Dispatchers.IO) {
+                runCatching {
+                    val t = title?.takeIf { it.isNotBlank() } ?: run {
+                        val j = app.get("$api/tmdb/${if (isTv) "tv" else "movie"}/$tmdb", headers = apiH).text
+                        Regex("""["']?(?:title|name)["']?\s*:\s*["']([^"']+)["']""").find(j)?.groupValues?.get(1)
+                    } ?: return@runCatching
+                    val enc = java.net.URLEncoder.encode(t, "UTF-8")
+                    val sj = app.get("$api/search?title=$enc", headers = apiH).text
+                    val dlId = Regex("""["']id["']\s*:\s*(\d+)""").find(sj)?.groupValues?.get(1) ?: return@runCatching
+                    val du = if (isTv) "$api/series/download/$dlId/season/${season ?: 1}/episode/${episode ?: 1}"
+                        else "$api/films/download/$dlId"
+                    val dj = app.get(du, headers = apiH).text
+                    AppUtils.parseJson<MxDownload>(dj).sources?.forEach { ds ->
+                        val url = (ds.m3u8 ?: ds.src)?.takeIf { it.startsWith("http") } ?: return@forEach
+                        val lang = ds.language ?: ""
+                        if (unwantedLangName(lang) && !wantedLangKey(lang)) return@forEach
+                        val q = ds.quality?.filter { it.isDigit() }?.take(4)?.toIntOrNull()
+                        emit("Movix · ${lang.ifEmpty { "direct" }}${if (q != null) " · ${q}p" else ""}", url, q)
+                    }
+                }
+            }
+        }
+        return found.get()
     }
 
     // --- réseau Frembed : serveurs réels du réseau (Voe/Dood/Uqload) par API.

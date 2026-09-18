@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 7
+version = 8
 
 cloudstream {
     description = "Movix — films & séries VF : serveurs movix.men + réseau Frembed + agrégateur (secours id IMDb), 13-30 serveurs"
