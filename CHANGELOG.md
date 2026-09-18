@@ -1,5 +1,36 @@
 # Journal des mises à jour
 
+## v11.7 — 2026-09-18 (multi-sources réseau + langues non-FR éliminées)
+
+### 🚀 MovixProvider v8 — 7 sources réseau en parallèle + filtre langues
+- **networkMultiSources** : 7 sources interrogées en parallèle via l'API
+  publique (Purstream HLS, Wiflix VF/VOSTFR, FrenchStream, Cpasmal, IMDb,
+  liens directs Movix, téléchargements m3u8 langue+qualité) — chacune bornée,
+  silencieuse en cas d'échec. Fight Club : 25-30 serveurs attendus.
+- **Filtre langues** : les serveurs Spanish/Latino/Deutsch/Italiano… de
+  vidsrc.buzz et des player_links sont désormais **exclus** (VF/VOSTFR/VO
+  uniquement, clés `vf`/`vostfr`/`truefrench`/`multi`… autorisées).
+- loadLinks : site + réseau Frembed + multi-sources **en parallèle** (25 s).
+
+### 🚀 FrembedProvider v3 — même architecture
+- networkMultiSources (7 sources, api publique) ajouté en parallèle des
+  serveurs Frembed réels ; filtre langues non-FR sur l'agrégateur buzz et
+  les multi-sources.
+
+### 🐛 XalaflixProvider v3 — LE bug « aucun serveur » trouvé et réparé
+- **Cause racine** : la v2 avait perdu sa fonction `loadLinks` entière
+  (suppression accidentelle lors du nettoyage v11.6) → 0 serveur garanti
+  sur tout le catalogue. Restaurée et renforcée :
+  - **fragment résilient** : `load()` encode `#t=titre#m=movie|tv` dans le
+    data des films/épisodes → même si la page (Cloudflare/timeout mobile)
+    ne répond pas, les multi-sources tournent ;
+  - **tmdbFromTitle** : id TMDB retrouvé par recherche de titre
+    (TMDB search/multi, cache mémoire) quand absent du HTML ;
+  - **multi-sources** : réseau Movix (7 sources) + réseau Frembed +
+    lecteurs publics + vidsrc.buzz, en parallèle, page ou pas ;
+  - filtre langues non-FR partout ; nettoyage des titres
+    (« … Streaming Gratuit », « … Complet VF/VOSTFR »).
+
 ## v11.6 — 2026-09-18 (correctifs majeurs : catalogues + serveurs)
 
 ### 🐛 MovixProvider v7 — catalogue complet + serveurs retrouvés

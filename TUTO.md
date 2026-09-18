@@ -1105,3 +1105,39 @@ s'acharner sur l'extraction :
    section en paramètre de repli.
 
 
+### 4.29 MULTI-SOURCES RÉSEAU + RÉSILIENCE AUX PAGES MORTES (v11.7)
+
+1. **Une extension sans `loadLinks` compile parfaitement** : l'override est
+   optionnel dans MainAPI — un nettoyage de code trop zélé qui supprime la
+   fonction (ou son bloc d'appel) produit une extension qui s'installe, dont
+   le catalogue marche, mais qui affiche « Aucun serveur » PARTOUT, sans
+   aucune erreur de compilation. Après CHAQUE modification de loadLinks :
+   `grep -c "override suspend fun loadLinks"` et un test live.
+2. **Encoder le contexte dans le `data`** : les pages des sites échouent
+   souvent sur mobile (Cloudflare, timeouts). `load()` doit tout mettre dans
+   l'URL passée à `newMovieLoadResponse`/`newEpisode` — ex. fragment
+   `#t=titre encodé#m=movie|tv` — pour que loadLinks puisse servir les
+   sources indépendantes du site (agrégateurs TMDB, APIs publiques) même
+   page morte : `pageUrl = data.substringBefore("#")`, titre décodé du
+   fragment.
+3. **id TMDB par le titre** : quand l'id n'est que dans le HTML de la page
+   (morte), recherche TMDB `search/multi?query=…` (clé publique, language
+   fr-FR), filtrer `media_type == "movie"|"tv"`, cacher dans un
+   `ConcurrentHashMap` (les liens d'une série appellent loadLinks ×N fois).
+4. **Multi-sources en parallèle bornée** : chaque source externe dans son
+   `launch(Dispatchers.IO) { runCatching { withTimeoutOrNull(15-25 s) { … } } }`
+   — une source morte ne doit jamais bloquer ni faire échouer les autres ;
+   récupérer le résultat via `AtomicBoolean` et non des exceptions.
+5. **Filtre langues centralisé** : une seule fonction
+   `unwantedLangName(n)` (spanish/latino/deutsch/italiano…) appliquée PARTOUT
+   (nom du serveur du site, `player_links`, `servers[].name` de l'agrégateur,
+   libellés des sources réseau) + `wantedLangKey(k)` pour les clés de maps
+   (`vf`/`vostfr`/`truefrench`/`multi`…). Les serveurs « Server Spanish » de
+   vidsrc.buzz arrivent SINON en masse.
+6. **APIs « réseau » tierces** : l'API publique d'un site concurrent peut
+   servir d'agrégateur (Purstream, Wiflix, FrenchStream, Cpasmal, IMDb,
+   liens directs, téléchargements) avec `Origin`/`Referer` du site d'origine
+   — 7 sources ⇒ 25-30 serveurs sur un film populaire, sans dépendre du site
+   lui-même.
+
+
